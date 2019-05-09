@@ -138,5 +138,3 @@ elif [ $# == '2' ]; then
 else
   echo -ne "Usage:\n     bash $0 [install |uninstall |install '{Kernel Version}']\n"
 fi
-
-
