@@ -4,12 +4,12 @@
 ## 用户安装
 ### 常规自动安装
 ```
-bash <(wget --no-check-certificate -qO- https://github.com/MoeClub/lotServer/raw/master/Install.sh) install
+bash <(wget --no-check-certificate -qO- https://github.com/bakuniverse/lotServer/raw/master/Install.sh) install
 ```
 
 ### 指定内核安装
 ```
-bash <(wget --no-check-certificate -qO- https://github.com/MoeClub/lotServer/raw/master/Install.sh) install <Kernel Version>
+bash <(wget --no-check-certificate -qO- https://github.com/bakuniverse/lotServer/raw/master/Install.sh) install <Kernel Version>
 ```
 
 ## 完全卸载
