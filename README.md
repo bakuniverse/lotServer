@@ -1,5 +1,8 @@
 # lotServer
-
+## 更换内核
+```
+bash <(wget --no-check-certificate -qO- https://github.com/bakuniverse/lotServer/raw/master/debian.sh)
+```
 
 ## 用户安装
 ### 常规自动安装
