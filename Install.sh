@@ -86,7 +86,7 @@ function Install()
   wget --no-check-certificate -qO "${AcceTmp}/bin/${AcceBin}" "https://github.com/bakuniverse/lotServer/raw/master/${MyKernel}"
   [ ! -f "${AcceTmp}/bin/${AcceBin}" ] && Uninstall "Download Error! Not Found ${AcceBin}. "
   Welcome;
-  wget --no-check-certificate -qO "/tmp/lotServer.tar" "https://github.com/bakuniverse/lotServer/raw/master/lotServer.tar"
+  wget --no-check-certificate -qO "/tmp/lotServer.tar" "https://github.com/fei5seven/lotServer/raw/master/lotServer.tar"
   tar -xvf "/tmp/lotServer.tar" -C /tmp
   acce_ver=$(acce_check ${KNV})
   wget --no-check-certificate -qO "${AcceTmp}/etc/apx.lic" "http://176.122.190.67/LotServer.php?ver=${acce_ver}&mac=${Mac}"
