@@ -1,117 +1,1608 @@
-lotServer/0000755000000000000000000000000013435676020011547 5ustar  rootrootlotServer/apxfiles/0000755000000000000000000000000013435676050013365 5ustar  rootrootlotServer/apxfiles/etc/0000755000000000000000000000000013435676247014150 5ustar  rootrootlotServer/apxfiles/etc/config0000644000000000000000000000466513455045515015341 0ustar  rootroot#!/bin/echo Warning: this is a library file, can not be execute directly:
-########################################################
-#                                                      #
-#             LotServer Configuration File             #
-#                                                      #
-########################################################
+lotServer/0000755000000000000000000000000013435676020011547 5ustar  rootrootlotServer/install.sh0000644000000000000000000002221413435474612013555 0ustar  rootroot#!/bin/bash
+# Copyright (C) 2015 AppexNetworks
+# Author:	Len
+# Date:		Aug, 2015
 
-# Format: config="value"
-# Note that spaces are not allowed before and after the equal sign
+export PATH="$PATH:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin"
 
-#------------------------------------------------------#
-#     below config items take effect after reload      #
-#------------------------------------------------------#
-accif="eth0"
-lanif=""
-acc="1"
-advacc="1"
-advinacc="0"
-wankbps="1000000"
-waninkbps="1000000"
-csvmode="0"
-highcsv="0"
-subnetAcc="0"
-maxmode="1"
-maxTxMinSsThresh="1048575"
-maxTxEffectiveMS="0"
-maxAccFlowTxKbps="0"
-pcapEnable="0"
-bypassOverFlows="1"
-initialCwndWan="22"
-maxCwndWan=""
-l2wQLimit="256 2048"
-w2lQLimit="256 2048"
-shrinkPacket="0"
-retranWaitListMS="32"
-halfCwndMinSRtt="500"
-halfCwndLossRateShift="3"
-shaperEnable="1"
-tcpOnly="1"
-smBurstMS="16"
-smBurstMin="16000"
-smBurstTolerance="32768"
-flowShortTimeout="30000"
-nic_offload="0"
-rsc="1"
-gso="1"
-ultraBoostWin="0"
-minSsThresh="8 24"
-dbcRttThreshMS=""
-smMinKbps=""
-lanSegment=""
-lanSegmentV6=""
-txCongestObey="1"
-taskSchedDelay="100 100"
-configTimeout="30"
-tcpFlags="0x0"
-udptun=""
-synRetranMS="0"
-shrinkOSWmem="0"
-mpoolMaxCache="245600000"
-initialCwndLan="1024"
-lttMaxDelayMS="0 500"
-halfCwndLowLimit="65535"
+ROOT_PATH=/appex
+SHELL_NAME=lotServer.sh
+PRODUCT_NAME=LotServer
+PRODUCT_ID=lotServer
+host=lotserver.cn
+interactiveMode=1
 
-#------------------------------------------------------#
-#     below config items take effect after restart     #
-#------------------------------------------------------#
-engineNum="0"
-accppp="0"
-shortRttMS="0"
-packetWrapper="256"
-pmtu=""
-detectInterrupt="0"
-# byte cache
-byteCacheEnable="0"
-dataCompEnable="0"
-httpCompEnable="1"
-byteCacheMemory="250" #MB
-byteCacheDisk="0" #MB
-diskDev="/var/AppEx_Cache"
-dropCache="3"
+[ -w / ] || {
+	echo "You are not running $PRODUCT_NAME Installer as root. Please rerun as root"
+	exit 1
+}
 
-# 0:not change, 1: on, 2: off
-txcsum="0" 
-rxcsum="0"
+if [ $# -ge 1 -a "$1" == "uninstall" ]; then
+	acceExists=$(ls $ROOT_PATH/bin/acce* 2>/dev/null)
+    [ -z "$acceExists" ] && {
+        echo "$PRODUCT_NAME is not installed!"
+        exit
+    }
+    $ROOT_PATH/bin/$SHELL_NAME uninstall
+    exit
+fi
 
+function disp_usage() {
+	echo "Usage:  $INVOKER"
+	echo "   or:  $INVOKER  [-in inbound_bandwidth] [-out outbound_bandwidth] [-i interface] [-r] [-t shortRttMS] [-gso <0|1>] [-rsc <0|1>] [-b]"
+	echo "   or:  $INVOKER uninstall"
+	echo
+	echo -e "  -b, --boot\t\tauto load $PRODUCT_NAME on linux start-up"
+	echo -e "  -gso\t\t0 or 1, enable or disable gso"
+	echo -e "  -h, --help\t\tdisplay this help and exit"
+	echo -e "  -i\t\t\tspecify your accelerated interface(s), default eth0"
+	echo -e "  -in\t\t\tinbound bandwidth, default 1000000 kbps"
+	echo -e "  -out\t\t\toutbound bandwidth, default 1000000 kbps"
+	echo -e "  -r\t\t\tstart $PRODUCT_NAME after installation"
+	echo -e "  -rsc\t\t0 or 1, enable or disable rsc"
+	echo -e "  -t\t\t\tspecify shortRttMS, default 0"
+	echo -e "  uninstall\t\tuninstall $PRODUCT_NAME"
+	exit 0
+}
+
+function disp_usage_lite() {
+	echo "Usage: $INVOKER [-in inbound_bandwidth] [-out outbound_bandwidth] [-i interface] [-r] [-t shortRttMS] [-gso <0|1>] [-rsc <0|1>] [-b]"
+	exit 0
+}
+
+initValue() {
+	while [ -n "$1" ]; do
+	case "$1" in
+		-b|-boot)
+			boot='y'
+			shift 1
+			;;
+		-i)
+			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
+				disp_usage_lite
+			else
+				accif=$2
+			fi
+			shift 2
+			interactiveMode=0
+			;;
+		-r)
+			startNow='y'
+			shift 1
+			;;
+		-s)
+			showDetail=1
+			shift 1
+			;;
+		-in)
+			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
+				disp_usage_lite
+			else
+				waninkbps=$2
+			fi
+			shift 2
+			interactiveMode=0
+			;;
+		-out)
+			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
+				disp_usage_lite
+			else
+				wankbps=$2
+			fi
+			shift 2
+			interactiveMode=0
+			;;
+		-h|--help)
+			disp_usage
+			exit 0
+			;;
+		-x)
+			shift 1
+			;;
+		-t)
+			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
+				disp_usage_lite
+			else
+				shortRttMS=$2
+			fi
+			shift 2
+			;;
+		-gso)
+			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
+				disp_usage_lite
+			else
+				gso=$2
+			fi
+			shift 2
+			;;
+		-rsc)
+			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
+				disp_usage_lite
+			else
+				rsc=$2
+			fi
+			shift 2
+			;;
+		
+		*)
+			echo "$0: unrecognized option '$1'"
+			echo
+			disp_usage
+			exit 1
+			;;
+	esac
+	done
+}
+
+[ $# -gt 0 ] && {
+	initValue "$@"
+}
+
+
+# Locate which
+WHICH=`which ls 2>/dev/null`
+[ $? -gt 0 ] && {
+	echo '"which" not found, please install "which" using "yum install which" or "apt-get install which" according to your linux distribution'
+	exit 1
+}
+
+IPCS=`which ipcs 2>/dev/null`
+[  $? -eq 0 ] && {
+    maxSegSize=`ipcs -l | awk -F= '/max seg size/ {print $2}'`
+    maxTotalSharedMem=`ipcs -l | awk -F= '/max total shared memory/ {print $2}'`
+    [ $maxSegSize -eq 0 -o $maxTotalSharedMem -eq 0 ] && {
+        echo "$PRODUCT_NAME needs to use shared memory, please configure the shared memory according to the following link: "
+        echo "http://$host/user.do?m=qa#4.4"
+        exit 1
+    }
+}
+
+ip2long() {
+	local IFS='.'
+	read ip1 ip2 ip3 ip4 <<<"$1"
+	echo $((ip1*(1<<24)+ip2*(1<<16)+ip3*(1<<8)+ip4))
+	#echo "$ip1 $ip2 $ip3 $ip4"
+}
+
+postInstall() {
+	local verName=$(cat $ROOT_PATH/etc/config | awk -F- '/^apxexe=/ {print $2}')
+	local intVerName=$(ip2long $verName)
+	local boundary
+	
+	boundary=$(ip2long '3.11.20.10')
+	[ $intVerName -ge $boundary ] && {
+		# if acce version greater than 3.11.20.10, set initial taskSchedDelay value to "100 100"
+		if [ -n "$(grep taskSchedDelay $ROOT_PATH/etc/config)" ]; then
+			sed -i "s/^taskSchedDelay=.*/taskSchedDelay=\"100 100\"/" $ROOT_PATH/etc/config
+		else
+			sed -i "/^txCongestObey=.*/taskSchedDelay=\"100 100\"" $ROOT_PATH/etc/config
+		fi
+	}
+}
+
+addStartUpLink() {
+	grep -E "CentOS|Fedora|Red.Hat" /etc/issue >/dev/null
+	[ $? -eq 0 ] && {
+		ln -sf $ROOT_PATH/bin/$SHELL_NAME /etc/rc.d/init.d/$PRODUCT_ID
+		[ -z "$boot" -o "$boot" = "n" ] && return
+		CHKCONFIG=`which chkconfig`
+		if [ -n "$CHKCONFIG" ]; then
+			chkconfig --add $PRODUCT_ID >/dev/null
+		else
+			ln -sf /etc/rc.d/init.d/$PRODUCT_ID /etc/rc.d/rc2.d/S20$PRODUCT_ID
+			ln -sf /etc/rc.d/init.d/$PRODUCT_ID /etc/rc.d/rc3.d/S20$PRODUCT_ID
+			ln -sf /etc/rc.d/init.d/$PRODUCT_ID /etc/rc.d/rc4.d/S20$PRODUCT_ID
+			ln -sf /etc/rc.d/init.d/$PRODUCT_ID /etc/rc.d/rc5.d/S20$PRODUCT_ID
+		fi
+	}
+	grep "SUSE" /etc/issue >/dev/null
+	[ $? -eq 0 ] && {
+		ln -sf $ROOT_PATH/bin/$SHELL_NAME /etc/rc.d/$PRODUCT_ID
+		[ -z "$boot" -o "$boot" = "n" ] && return
+		CHKCONFIG=`which chkconfig`
+		if [ -n "$CHKCONFIG" ]; then
+			chkconfig --add $PRODUCT_ID >/dev/null
+		else
+			ln -sf /etc/rc.d/$PRODUCT_ID /etc/rc.d/rc2.d/S06$PRODUCT_ID
+			ln -sf /etc/rc.d/$PRODUCT_ID /etc/rc.d/rc3.d/S06$PRODUCT_ID
+			ln -sf /etc/rc.d/$PRODUCT_ID /etc/rc.d/rc5.d/S06$PRODUCT_ID
+		fi
+	}
+	grep -E "Ubuntu|Debian" /etc/issue >/dev/null
+	[ $? -eq 0 ] && {
+		ln -sf $ROOT_PATH/bin/$SHELL_NAME /etc/init.d/$PRODUCT_ID
+		[ -z "$boot" -o "$boot" = "n" ] && return 
+		ln -sf /etc/init.d/$PRODUCT_ID /etc/rc2.d/S03$PRODUCT_ID
+		ln -sf /etc/init.d/$PRODUCT_ID /etc/rc3.d/S03$PRODUCT_ID
+		ln -sf /etc/init.d/$PRODUCT_ID /etc/rc5.d/S03$PRODUCT_ID
+	}
+	ln -sf $ROOT_PATH/etc/config /etc/$PRODUCT_ID.conf
+}
+
+[ -d $ROOT_PATH/bin ] || mkdir -p $ROOT_PATH/bin
+[ -d $ROOT_PATH/etc ] || mkdir -p $ROOT_PATH/etc
+[ -d $ROOT_PATH/log ] || mkdir -p $ROOT_PATH/log
+cd $(dirname $0)
+dt=`date +%Y-%m-%d_%H-%M-%S`
+[ -f $ROOT_PATH/etc/config ] && mv -f $ROOT_PATH/etc/config $ROOT_PATH/etc/.config_$dt.bak
+
+cp -f apxfiles/bin/* $ROOT_PATH/bin/
+cp -f apxfiles/etc/* $ROOT_PATH/etc/
+chmod +x $ROOT_PATH/bin/*
+
+[ -f $ROOT_PATH/etc/.config_$dt.bak ] && {
+	while read _line; do
+		item=$(echo $_line | awk -F= '/^[^#]/ {print $1}')
+		val=$(echo $_line | awk -F= '/^[^#]/ {print $2}' | sed 's#\/#\\\/#g')
+		[ -n "$item" -a "$item" != "accpath" -a "$item" != "apxexe" -a "$item" != "apxlic" -a "$item" != "installerID" -a "$item" != "email" -a "$item" != "serial" ] && {
+			if [ -n "$(grep $item $ROOT_PATH/etc/config)" ]; then
+				sed -i "s/^$item=.*/$item=$val/" $ROOT_PATH/etc/config
+			else
+				sed -i "/^engineNum=.*/a$item=$val" $ROOT_PATH/etc/config
+			fi
+		}
+	done<$ROOT_PATH/etc/.config_$dt.bak
+}
+
+postInstall
+
+[ -f apxfiles/expiredDate ] && {
+    echo -n "Expired date: "
+    cat apxfiles/expiredDate
+    echo
+}
+
+echo "Installation done!"
+echo
+ 
+# Set acc inf
+echo ----
+echo You are about to be asked to enter information that will be used by $PRODUCT_NAME,
+echo there are several fields and you can leave them blank,
+echo 'for all fields there will be a default value.'
+echo ----
+
+[ $interactiveMode -eq 1 -a -z "$accif" ] && {
+	# Set acc inf
+	echo -n "Enter your accelerated interface(s) [eth0]: "
+	read accif
+}
+[ $interactiveMode -eq 1 -a -z "$wankbps" ] && {
+	echo -n "Enter your outbound bandwidth [1000000 kbps]: "
+	read wankbps
+}
+[ $interactiveMode -eq 1 -a -z "$waninkbps" ] && {
+	echo -n "Enter your inbound bandwidth [1000000 kbps]: "
+	read waninkbps
+}
+[ $interactiveMode -eq 1 -a -z "$shortRttMS" ] && {
+	echo -e "\033[30;40;1m"
+	echo 'Notice:After set shorttRtt-bypass value larger than 0,' 
+	echo 'it will bypass(not accelerate) all first flow from same 24-bit'
+	echo 'network segment and the flows with RTT lower than the shortRtt-bypass value'
+	echo -e "\033[0m"
+	echo -n "Configure shortRtt-bypass [0 ms]: "
+	read shortRttMS
+}
+
+[ -z "$shortRttMS" ] || [ -n "${shortRttMS//[0-9]}" ] && shortRttMS=0
+
+[ -n "$accif" ] && sed -i "s/^accif=.*/accif=\"$accif\"/" $ROOT_PATH/etc/config
+[ -n "$wankbps" ] && {
+	wankbps=$(echo $wankbps | tr -d "[:alpha:][:space:]")
+	sed -i "s/^wankbps=.*/wankbps=\"$wankbps\"/" $ROOT_PATH/etc/config
+}
+[ -n "$waninkbps" ] && {
+	waninkbps=$(echo $waninkbps | tr -d "[:alpha:][:space:]")
+	sed -i "s/^waninkbps=.*/waninkbps=\"$waninkbps\"/" $ROOT_PATH/etc/config
+}
+[ -n "$shortRttMS" ] && {
+	shortRttMS=$(echo $shortRttMS | tr -d "[:alpha:][:space:]")
+	sed -i "s/^shortRttMS=.*/shortRttMS=\"$shortRttMS\"/" $ROOT_PATH/etc/config
+}
+
+[ -n "$gso" ] && {
+	gso=$(echo $gso | tr -d "[:alpha:][:space:]")
+	[ "$gso" = "1" ] && gso=1 || gso=0
+	sed -i "s/^gso=.*/gso=\"$gso\"/" $ROOT_PATH/etc/config
+}
+
+[ -n "$rsc" ] && {
+	rsc=$(echo $rsc | tr -d "[:alpha:][:space:]")
+	[ "$rsc" = "1" ] && rsc=1 || rsc=0
+	sed -i "s/^rsc=.*/rsc=\"$rsc\"/" $ROOT_PATH/etc/config
+}
+
+[ $interactiveMode -eq 1 -a -z "$boot" ] && {
+	while [ "$boot" != 'y' -a "$boot" != 'n' -a "$boot" != 'Y' -a "$boot" != 'N'  ]; do
+		echo -n "Auto load $PRODUCT_NAME on linux start-up? [n]:"
+		read boot
+		[ -z "$boot" ] && boot=n
+	done
+	[ "$boot" = "N" ] && boot=n 
+}
+
+addStartUpLink
+
+[ $interactiveMode -eq 1 -a -z "$startNow" ] && {
+	while [ "$startNow" != 'y' -a "$startNow" != 'n' -a "$startNow" != 'Y' -a "$startNow" != 'N'  ]; do
+		echo -n "Run $PRODUCT_NAME now? [y]:"
+		read startNow
+		[ -z "$startNow" ] && startNow=y
+	done
+}
+
+[ "$startNow" = "y" -o "$startNow" = "Y" ] && {
+	$ROOT_PATH/bin/$SHELL_NAME stop >/dev/null 2>&1
+	$ROOT_PATH/bin/$SHELL_NAME start 
+}
+lotServer/apxfiles/0000755000000000000000000000000013435676050013365 5ustar  rootrootlotServer/apxfiles/bin/0000755000000000000000000000000013435676045014141 5ustar  rootrootlotServer/apxfiles/bin/renewLic.sh0000644000000000000000000001072213435474612016243 0ustar  rootroot#!/bin/echo Warning: this is a library file, can not be execute directly:
+# Copyright (C) 2015 AppexNetworks
+# Author:	Len
+# Date:		Aug, 2015
+
+function renew() {
+
+	echo
+	echo "************************************************************"
+	echo "*                                                          *"
+	echo "*          AppEx LotServer License Updater (1.2)           *"        
+	echo "*                                                          *"
+	echo "************************************************************"
+	echo
+
+	# Locate wget
+	which wget >/dev/null 2>&1
+	[ $? -ne 0 ] && {
+		echo 'ERROR(WGET): "wget" not found, please install "wget" using "yum install wget" or "apt-get install wget" according to your linux distribution'
+		return 1
+	}
+	
+	# Get interface
+	local ifname=eth0
+	[ -f /proc/net/dev ] && {
+		if grep 'eth0:' /proc/net/dev >/dev/null; then
+			ifname=eth0
+		else
+			#exclude: lo sit stf gif dummy vmnet vir        
+			ifname=`cat /proc/net/dev | awk -F: 'function trim(str){sub(/^[ \t]*/,"",str); sub(/[ \t]*$/,"",str); return str } NR>2 {print trim($1)}'  | grep -Ev '^lo|^sit|^stf|^gif|^dummy|^vmnet|^vir|^gre|^ipip|^ppp|^bond|^tun|^tap|^ip6gre|^ip6tnl|^teql' | awk 'NR==1 {print $0}' `
+		fi
+	}
+	
+	[ -z "$ifname" ] && {
+		echo "Network interface not found! (error code: 100)"
+		return 1
+	}
+	[ -z "$email" -o -z "$serial" ] && {
+		echo "Missing parmeters in config file: email or serial"
+		return 1
+	}
+	
+	local licneseCode=''
+	[ -n "$1" -a "$1" != "-grace" ] && {
+		local charCnt=$(echo -n "$1" | wc -m)
+		[ "$1" != 'auto' -a "$charCnt" != "16" ] && {
+			echo "Invalid License Code format"
+			return 1
+		}
+		licenseCode=$1
+	}
+	
+	local para="e=$email&s=$serial&i=$ifname&c=$licenseCode"
+	local url="http://$HOST/ls_updatelic.jsp?ml=$email&ml2=$serial&ml3=$ifname"
+	
+	local out=apxhttp.$$
+	rm -rf $ROOT_PATH/lic 2>/dev/null
+	echo "authenticating..."
+	wget --save-cookies cookies.$$ --keep-session-cookies --post-data $para -o $out -O $ROOT_PATH/lic $url
+	local downStat=0
+	[ -f $ROOT_PATH/lic ] && {
+		local filesize=0
+		local stat=`which stat`
+		[ -n "$stat" ] && filesize=`stat -c "%s" $ROOT_PATH/lic`
+		[ -z "$stat" ] && filesize=`ls -l $ROOT_PATH/lic | awk '{print $5}'`
+		[ $filesize -gt 100 ] && downStat=1
+	}
+	if [ $downStat = 1 ]; then
+		sleep 1
+		[ -f cookies.$$ ] && {
+			newname=`cat cookies.$$ | awk '/licenceName/ {print $7}'`
+			expireDate=`cat cookies.$$ | awk '/expireDate/ {print $7}'`
+		}
+		[ -z "$newname" ] && newname="apx.lic"
+		mv $ROOT_PATH/lic $ROOT_PATH/etc/$newname
+		echo "License file updated!"
+		sed -i "s/^apxlic=.*/apxlic=\"\\$ROOT_PATH\/etc\/$newname\"/" $ROOT_PATH/etc/config
+		. $ROOT_PATH/etc/config 2>/dev/null
+		[ $VER_STAGE -lt 19 -o "$1" != "-grace" ] && {
+			[ -n "$expireDate" ] && echo "Expire date: $expireDate"
+			echo "Restarting $PRODUCT_NAME..."
+			restart
+		}
+		echo "Done!"
+	else
+		grep 401 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "Email does not exist! (error code: 401)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 402 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "Invalid license code! (error code: 402)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 403 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "License does not exist! (error code: 403)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 408 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "License code used out! (error code: 408)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 409 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "License code expired! (error code: 409)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 411 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "Not allowed IP address.(error code: 411)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 412 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "No available license code.(error code: 412)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 413 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "Do not need to renew license"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 417 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "Your license has expired! (error code: 417)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		grep 503 $out >/dev/null 2>&1
+		[ $? -eq 0 ] && {
+			echo "Serial no of this server is obsolete! (error code: 503)"
+			rm -rf $out cookies.$$ 2>/dev/null
+			return 1
+		}
+		echo "Error occur! (error code: 400)"
+		cat $out
+		rm -rf $out cookies.$$ 2>/dev/null
+	fi
+	rm -rf $out cookies.$$ 2>/dev/null
+}lotServer/apxfiles/bin/utils.sh0000644000000000000000000004626013435474612015641 0ustar  rootroot#!/bin/bash
+# Copyright (C) 2017 AppexNetworks
+# Author:	Len
+# Date:		May, 2017
 #
-# IPv4 & IPv6
-#
-# only enable IPv4 or IPv6
-ipv4Only=0
-ipv6Only=0
 
-#ipHooks="0"
-#ipRxHookPri=""
-#ipTxHookPri=""
-#ipv6Hooks="0"
-#ipv6RxHookPri=""
-#ipv6TxHookPri=""
+ROOT_PATH=/appex
+PRODUCT_NAME=LotServer
 
-#------------------------------------------------------#
-#         do not change the following configures       #
-#------------------------------------------------------#
-usermode=0
-licenseGen=0
-checkLicense=0
-accpath="/proc/net/appex"
-apxexe=""
-rttko="/appex/bin/{rttko}"
-apxlic="/appex/etc/apx.lic"
+[ -f $ROOT_PATH/etc/config ] || { echo "Missing file: $ROOT_PATH/etc/config"; exit 1; }
+. $ROOT_PATH/etc/config 2>/dev/null
 
-email="lotServer@MoeClub.org"
-installerID="MoeClub"
-lotServer/apxfiles/bin/0000755000000000000000000000000013455046207014132 5ustar  rootrootlotServer/apxfiles/bin/lotServer.sh0000644000000000000000000016323713455046204016464 0ustar  rootroot#!/bin/bash
+# Locate bc
+BC=`which bc`
+[ -z "$BC" ] && {
+    echo "bc not found, please install \"bc\" using \"yum install bc\" or \"apt-get install bc\" according to your linux distribution"
+    exit 1
+}
+
+KILLNAME=$(echo $(basename $apxexe) | sed "s/-\[.*\]//")
+[ -z "$KILLNAME" ] && KILLNAME="acce-";
+KILLNAME=acce-[0-9.-]+\[.*\]
+pkill -0 $KILLNAME 2>/dev/null
+[ $? -eq 0 ] || {
+    echo "$PRODUCT_NAME is NOT running!"
+    exit 1
+}
+
+CPUNUM=0
+VER_STAGE=1
+TOTAL_TIME=65535
+CALC_ITV=5 #seconds
+HL_START="\033[37;40;1m"
+HL_END="\033[0m" 
+[ -z "$usermode" ] && usermode=0
+
+ip2long() {
+  local IFS='.'
+  read ip1 ip2 ip3 ip4 <<<"$1"
+  echo $((ip1*(1<<24)+ip2*(1<<16)+ip3*(1<<8)+ip4))
+  #echo "$ip1 $ip2 $ip3 $ip4"
+}
+
+getVerStage() {
+	local verName=$(echo $apxexe | awk -F- '{print $2}')
+	local intVerName=$(ip2long $verName)
+	local boundary=0
+	
+	boundary=$(ip2long '3.11.42.203')
+	[ $intVerName -ge $boundary ] && {
+		#IPv6, and related config
+		VER_STAGE=33
+		return
+	}
+	
+	boundary=$(ip2long '3.9.10.34')
+	[ $intVerName -ge $boundary ] && {
+		#support output session restriction msg
+		VER_STAGE=5
+		return
+	}
+	
+	boundary=$(ip2long '3.9.10.30')
+	[ $intVerName -ge $boundary ] && {
+		#support specify cpuid
+		VER_STAGE=4
+		return
+	}
+	
+	boundary=$(ip2long '3.9.10.23')
+	[ $intVerName -ge $boundary ] && {
+		#support 256 interfaces
+		VER_STAGE=3
+		return
+	}
+	
+	boundary=$(ip2long '3.9.10.10')
+	[ $intVerName -ge $boundary ] && {
+		#support multiple cpu
+		VER_STAGE=2
+		return
+	}
+}
+
+getCpuNum() {
+	[ $usermode -eq 1 ] && {
+		CPUNUM=1
+		return
+	}
+	[ $VER_STAGE -eq 1 ] && {
+		CPUNUM=1
+		return
+	}
+	if [ $VER_STAGE -ge 4 -a -n "$cpuID" ]; then
+		CPUNUM=$(echo $cpuID | awk -F, '{print NF}')
+		#num=`cat /proc/stat | grep cpu | wc -l`
+		#num=`expr $num - 1`
+		#[ $CPUNUM -gt $num ] && echo
+	else
+		num=`cat /proc/stat | grep cpu | wc -l`
+		num=`expr $num - 1`
+		CPUNUM=$num
+		[ -n "$engineNum" ] && {
+			[ $engineNum -gt 0 -a $engineNum -lt $num ] && CPUNUM=$engineNum
+		}
+		X86_64=$(uname -a | grep -i x86_64)
+		[ -z "$X86_64" -a $CPUNUM -gt 4 ] && CPUNUM=4
+	fi
+	[ -n "$1" -a -n "$X86_64" -a $CPUNUM -gt 4 ] && {
+		memTotal=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+		used=$(($CPUNUM * 800000)) #800M
+		left=$(($memTotal - $used))
+		[ $left -lt 2000000 ] && {
+			HL_START="\033[37;40;1m"
+			HL_END="\033[0m"
+			echo -en "$HL_START"
+			echo "$PRODUCT_NAME Warning: $CPUNUM engines will be launched according to the config file. Your system's total RAM is $memTotal(KB), which might be insufficient to run all the engines without performance penalty under extreme network conditions. "
+			echo -en "$HL_END"
+		}    
+	}
+}
+
+initCmd() {
+    eNum=0
+    while [ $eNum -lt $CPUNUM ]; do
+        if [ $usermode -eq 0 ]; then
+        	e=$eNum
+        	[ $e -eq 0 ] && e=''
+	        [ -d /proc/net/appex$e ] && {
+	            echo "displayLevel: 5" > /proc/net/appex$e/cmd
+	        }
+        else
+        	$apxexe /$eNum/cmd="displayLevel 5"
+        fi
+        ((eNum = $eNum + 1))
+    done
+}
+
+dump_flow()
+{
+
+	cmd="$cmd /usr/bin/printf \"total sessions: $HL_START%d$HL_END, \" $NumOfFlows;"
+	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $NumOfTcpFlows;"
+	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $NumOfAccFlows;"
+	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $NumOfActFlows;"
+	#echo
+	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in: $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s \" $wanInRate $wanOutRate;"
+	[ -n "$showLan" ] && {
+		cmd="$cmd /usr/bin/printf \"lan out: $HL_START%.2F$HL_END kbit/s\tlan in:  $HL_START%.2F$HL_END kbit/s \" $lanOutRate $lanInRate;"
+		cmd="$cmd /usr/bin/printf \"retransmission ratio: $HL_START%.1F %%$HL_END\" $outRatio;"
+	}
+	cmd="$cmd /usr/bin/printf \"\n\";"
+}
+
+dump_ipv4_flow()
+{
+	cmd="$cmd /usr/bin/printf \"ipv4 sessions: $HL_START%d$HL_END, \" $V4NumOfFlows;"
+	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $V4NumOfTcpFlows;"
+	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $V4NumOfAccFlows;"
+	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $V4NumOfActFlows;"
+	[ $NfBypass -gt 0 ] && cmd="$cmd /usr/bin/printf \"Short-RTT bypassed packets: $HL_START%d$HL_END\n\" $NfBypass;"
+	#echo
+	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in: $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s \" $v4wanInRate $v4wanOutRate;"
+	[ -n "$showLan" ] && {
+		cmd="$cmd /usr/bin/printf \"lan out: $HL_START%.2F$HL_END kbit/s\tlan in:  $HL_START%.2F$HL_END kbit/s \" $v4lanOutRate $v4lanInRate;"
+		cmd="$cmd /usr/bin/printf \"retransmission ratio: $HL_START%.1F %%$HL_END\" $v4outRatio;"
+	}
+	cmd="$cmd /usr/bin/printf \"\n\";"
+}
+
+dump_ipv6_flow()
+{
+	cmd="$cmd /usr/bin/printf \"ipv6 sessions: $HL_START%d$HL_END, \" $V6NumOfFlows;"
+	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $V6NumOfTcpFlows;"
+	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $V6NumOfAccFlows;"
+	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $V6NumOfActFlows;"
+	#echo
+	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in: $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s \" $v6wanInRate $v6wanOutRate;"
+	[ -n "$showLan" ] && {
+		cmd="$cmd /usr/bin/printf \"lan out: $HL_START%.2F$HL_END kbit/s\tlan in:  $HL_START%.2F$HL_END kbit/s \" $v6lanOutRate $v6lanInRate;"
+		cmd="$cmd /usr/bin/printf \"retransmission ratio: $HL_START%.1F %%$HL_END\" $v6outRatio;"
+	}
+	cmd="$cmd /usr/bin/printf \"\n\";"
+}
+
+dump_total_flow()
+{
+
+	cmd="$cmd /usr/bin/printf \"total sessions: $HL_START%d$HL_END, \" $NumOfFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $NumOfTcpFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $NumOfAccFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $NumOfActFlowsTotal;"
+	#echo
+	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in :  $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s\" $wanInRateTotal $wanOutRateTotal;"
+	[ -n "$showLan" ] && {
+		cmd="$cmd /usr/bin/printf \" lan out: $HL_START%.2F$HL_END kbit/s\tlan in :  $HL_START%.2F$HL_END kbit/s\" $lanOutRateTotal $lanInRateTotal;"
+            	
+		if [ $wanOutValTotal -gt 0 ]; then
+			outRatio=$(echo "($wanOutValTotal - $lanInValTotal) * 100 / $wanOutValTotal" | bc -l)
+		else
+			outRatio=0
+		fi
+		cmd="$cmd /usr/bin/printf \" retransmission ratio: $HL_START%.1F %%$HL_END \" $outRatio;"
+	}
+	cmd="$cmd /usr/bin/printf \"\n\";"
+}
+
+dump_total_ipv4_flow()
+{
+	cmd="$cmd /usr/bin/printf \"ipv4 sessions: $HL_START%d$HL_END, \" $V4NumOfFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $V4NumOfTcpFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $V4NumOfAccFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $V4NumOfActFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"Short-RTT bypassed packets: $HL_START%d$HL_END\n\" $NfBypassTotal;"
+	#echo
+	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in :  $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s\" $v4wanInRateTotal $v4wanOutRateTotal;"
+	[ -n "$showLan" ] && {
+		cmd="$cmd /usr/bin/printf \" lan out: $HL_START%.2F$HL_END kbit/s\tlan in :  $HL_START%.2F$HL_END kbit/s\" $v4lanOutRateTotal $v4lanInRateTotal;"
+            	
+		if [ $v4wanOutValTotal -gt 0 ]; then
+			v4outRatio=$(echo "($v4wanOutValTotal - $v4lanInValTotal) * 100 / $v4wanOutValTotal" | bc -l)
+		else
+			v4outRatio=0
+		fi
+		cmd="$cmd /usr/bin/printf \" retransmission ratio: $HL_START%.1F %%$HL_END \" $v4outRatio;"
+	}
+	cmd="$cmd /usr/bin/printf \"\n\";"
+}
+
+dump_total_ipv6_flow()
+{
+	cmd="$cmd /usr/bin/printf \"ipv6 sessions: $HL_START%d$HL_END, \" $V6NumOfFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $V6NumOfTcpFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $V6NumOfAccFlowsTotal;"
+	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $V6NumOfActFlowsTotal;"
+#	cmd="$cmd /usr/bin/printf \"Short-RTT bypassed packets: $HL_START%d$HL_END\n\" $NfBypassTotal;"
+	#echo
+	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in :  $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s\" $v6wanInRateTotal $v6wanOutRateTotal;"
+	[ -n "$showLan" ] && {
+		cmd="$cmd /usr/bin/printf \" lan out: $HL_START%.2F$HL_END kbit/s\tlan in :  $HL_START%.2F$HL_END kbit/s\" $v6lanOutRateTotal $v6lanInRateTotal;"
+            	
+		if [ $v6wanOutValTotal -gt 0 ]; then
+			v6outRatio=$(echo "($v6wanOutValTotal - $v6lanInValTotal) * 100 / $v6wanOutValTotal" | bc -l)
+		else
+			v6outRatio=0
+		fi
+		cmd="$cmd /usr/bin/printf \" retransmission ratio: $HL_START%.1F %%$HL_END \" $v6outRatio;"
+	}
+	cmd="$cmd /usr/bin/printf \"\n\";"
+}
+
+
+showStats() {
+    initCmd
+    count=0
+    lstTime=$(date +%s)
+    cmd=''
+    showLan=''
+    [ "$1" = "all" ] && showLan=1
+    while [ $count -lt $TOTAL_TIME ]; do
+        eNum=0
+        cmd=''
+        wanInRateTotal=0
+        lanInRateTotal=0
+        wanOutRateTotal=0
+        lanOutRateTotal=0
+        v4wanInRateTotal=0
+        v4lanInRateTotal=0
+        v4wanOutRateTotal=0
+        v4lanOutRateTotal=0
+        v6wanInRateTotal=0
+        v6lanInRateTotal=0
+        v6wanOutRateTotal=0
+        v6lanOutRateTotal=0
+        NumOfFlowsTotal=0
+        NumOfTcpFlowsTotal=0
+        NumOfAccFlowsTotal=0
+        NumOfActFlowsTotal=0
+        V4NumOfFlowsTotal=0
+        V4NumOfTcpFlowsTotal=0
+        V4NumOfAccFlowsTotal=0
+        V4NumOfActFlowsTotal=0
+        V6NumOfFlowsTotal=0
+        V6NumOfTcpFlowsTotal=0
+        V6NumOfAccFlowsTotal=0
+        V6NumOfActFlowsTotal=0
+        NfBypassTotal=0
+        lanInValTotal=0
+        wanOutValTotal=0
+        v4lanInValTotal=0
+        v4wanOutValTotal=0
+        v6lanInValTotal=0
+        v6wanOutValTotal=0
+        while [ $eNum -lt $CPUNUM ]; do
+        	if [ $usermode -eq 0 ]; then
+        		e=$eNum
+	            [ $e -eq 0 ] && e=''
+	            [ -d /proc/net/appex$e ] || {
+	                ((eNum = $eNum + 1))
+	                continue
+	            }
+	            eval $(cat /proc/net/appex$e/stats | egrep '(NumOf.*Flows)|(Bytes)|(NfBypass)' | sed 's/\s*//g')
+        	else
+        		eval $($apxexe /$eNum/stats | egrep '(NumOf.*Flows)|(Bytes)|(NfBypass)' | sed 's/\s*//g')
+        	fi
+	            
+            [ -z "$NumOfFlows" ] && NumOfFlows=0
+            [ -z "$NumOfTcpFlows" ] && NumOfTcpFlows=0
+            [ -z "$NumOfAccFlows" ] && NumOfAccFlows=0
+            [ -z "$NumOfActFlows" ] && NumOfActFlows=0
+            [ -z "$V4NumOfFlows" ] && V4NumOfFlows=0
+            [ -z "$V4NumOfTcpFlows" ] && V4NumOfTcpFlows=0
+            [ -z "$V4NumOfAccFlows" ] && V4NumOfAccFlows=0
+            [ -z "$V4NumOfActFlows" ] && V4NumOfActFlows=0
+            [ -z "$V6NumOfFlows" ] && V6NumOfFlows=0
+            [ -z "$V6NumOfTcpFlows" ] && V6NumOfTcpFlows=0
+            [ -z "$V6NumOfAccFlows" ] && V6NumOfAccFlows=0
+            [ -z "$V6NumOfActFlows" ] && V6NumOfActFlows=0
+            [ -z "$WanInBytes" ] && WanInBytes=0
+            [ -z "$LanInBytes" ] && LanInBytes=0
+            [ -z "$WanOutBytes" ] && WanOutBytes=0
+            [ -z "$LanOutBytes" ] && LanOutBytes=0
+            [ -z "$V4WanInBytes" ] && V4WanInBytes=0
+            [ -z "$V4LanInBytes" ] && V4LanInBytes=0
+            [ -z "$V4WanOutBytes" ] && V4WanOutBytes=0
+            [ -z "$V4LanOutBytes" ] && V4LanOutBytes=0
+            [ -z "$V6WanInBytes" ] && V6WanInBytes=0
+            [ -z "$V6LanInBytes" ] && V6LanInBytes=0
+            [ -z "$V6WanOutBytes" ] && V6WanOutBytes=0
+            [ -z "$V6LanOutBytes" ] && V6LanOutBytes=0
+            [ -z "$NfBypass" ] && NfBypass=0
+            
+            eval wanInPre=\$wan_in_pre_$e
+            eval lanInPre=\$lan_in_pre_$e
+            eval wanOutPre=\$wan_out_pre_$e
+            eval lanOutPre=\$lan_out_pre_$e
+            eval v4wanInPre=\$v4wan_in_pre_$e
+            eval v4lanInPre=\$v4lan_in_pre_$e
+            eval v4wanOutPre=\$v4wan_out_pre_$e
+            eval v4lanOutPre=\$v4lan_out_pre_$e
+            eval v6wanInPre=\$v6wan_in_pre_$e
+            eval v6lanInPre=\$v6lan_in_pre_$e
+            eval v6wanOutPre=\$v6wan_out_pre_$e
+            eval v6lanOutPre=\$v6lan_out_pre_$e
+            
+            wanIn=$WanInBytes
+            lanIn=$LanInBytes
+            wanOut=$WanOutBytes
+            lanOut=$LanOutBytes
+            v4wanIn=$V4WanInBytes
+            v4lanIn=$V4LanInBytes
+            v4wanOut=$V4WanOutBytes
+            v4lanOut=$V4LanOutBytes
+            v6wanIn=$V6WanInBytes
+            v6lanIn=$V6LanInBytes
+            v6wanOut=$V6WanOutBytes
+            v6lanOut=$V6LanOutBytes
+            
+            [ -z "$wanInPre" ] && {
+                wanInPre=$wanIn
+                lanInPre=$lanIn
+                wanOutPre=$wanOut
+                lanOutPre=$lanOut
+            }
+            [ -z "$v4wanInPre" ] && {
+                v4wanInPre=$v4wanIn
+                v4lanInPre=$v4lanIn
+                v4wanOutPre=$v4wanOut
+                v4lanOutPre=$v4lanOut
+            }
+            [ -z "$v6wanInPre" ] && {
+                v6wanInPre=$v6wanIn
+                v6lanInPre=$v6lanIn
+                v6wanOutPre=$v6wanOut
+                v6lanOutPre=$v6lanOut
+            }
+            
+            eval wan_in_pre_$e=$wanIn
+            eval lan_in_pre_$e=$lanIn
+            eval wan_out_pre_$e=$wanOut
+            eval lan_out_pre_$e=$lanOut
+            eval v4wan_in_pre_$e=$v4wanIn
+            eval v4lan_in_pre_$e=$v4lanIn
+            eval v4wan_out_pre_$e=$v4wanOut
+            eval v4lan_out_pre_$e=$v4lanOut
+            eval v6wan_in_pre_$e=$v6wanIn
+            eval v6lan_in_pre_$e=$v6lanIn
+            eval v6wan_out_pre_$e=$v6wanOut
+            eval v6lan_out_pre_$e=$v6lanOut
+
+            wanInVal=$(echo "$wanIn - $wanInPre" | bc -l)
+            lanInVal=$(echo "$lanIn - $lanInPre" | bc -l)
+            wanOutVal=$(echo "$wanOut - $wanOutPre" | bc -l)
+            lanOutVal=$(echo "$lanOut - $lanOutPre" | bc -l)
+            v4wanInVal=$(echo "$v4wanIn - $v4wanInPre" | bc -l)
+            v4lanInVal=$(echo "$v4lanIn - $v4lanInPre" | bc -l)
+            v4wanOutVal=$(echo "$v4wanOut - $v4wanOutPre" | bc -l)
+            v4lanOutVal=$(echo "$v4lanOut - $v4lanOutPre" | bc -l)
+            v6wanInVal=$(echo "$v6wanIn - $v6wanInPre" | bc -l)
+            v6lanInVal=$(echo "$v6lanIn - $v6lanInPre" | bc -l)
+            v6wanOutVal=$(echo "$v6wanOut - $v6wanOutPre" | bc -l)
+            v6lanOutVal=$(echo "$v6lanOut - $v6lanOutPre" | bc -l)
+                                    
+            #calc ratio
+            wanInRate=$(echo "$wanInVal / (128 * $CALC_ITV)" | bc -l)
+            lanInRate=$(echo "$lanInVal / (128 * $CALC_ITV)" | bc -l)
+            wanOutRate=$(echo "$wanOutVal / (128 * $CALC_ITV)" | bc -l)
+            lanOutRate=$(echo "$lanOutVal / (128 * $CALC_ITV)" | bc -l)
+            v4wanInRate=$(echo "$v4wanInVal / (128 * $CALC_ITV)" | bc -l)
+            v4lanInRate=$(echo "$v4lanInVal / (128 * $CALC_ITV)" | bc -l)
+            v4wanOutRate=$(echo "$v4wanOutVal / (128 * $CALC_ITV)" | bc -l)
+            v4lanOutRate=$(echo "$v4lanOutVal / (128 * $CALC_ITV)" | bc -l)
+            v6wanInRate=$(echo "$v6wanInVal / (128 * $CALC_ITV)" | bc -l)
+            v6lanInRate=$(echo "$v6lanInVal / (128 * $CALC_ITV)" | bc -l)
+            v6wanOutRate=$(echo "$v6wanOutVal / (128 * $CALC_ITV)" | bc -l)
+            v6lanOutRate=$(echo "$v6lanOutVal / (128 * $CALC_ITV)" | bc -l)
+            
+            # ratio of lanin wanout #(wanout - lanin) / wanout
+			if [ $wanOutVal -gt 0 ]; then
+				outRatio=$(echo "($wanOutVal - $lanInVal) * 100 / $wanOutVal" | bc -l)
+			else
+				outRatio=0
+			fi
+			if [ $v4wanOutVal -gt 0 ]; then
+				v4outRatio=$(echo "($v4wanOutVal - $v4lanInVal) * 100 / $v4wanOutVal" | bc -l)
+			else
+				v4outRatio=0
+			fi
+			if [ $v6wanOutVal -gt 0 ]; then
+				v6outRatio=$(echo "($v6wanOutVal - $v6lanInVal) * 100 / $v6wanOutVal" | bc -l)
+			else
+				v6outRatio=0
+			fi
+            
+            if [ $CPUNUM -gt 1 ]; then
+                ((NumOfFlowsTotal = $NumOfFlowsTotal + $NumOfFlows))
+                ((NumOfTcpFlowsTotal = $NumOfTcpFlowsTotal + $NumOfTcpFlows))
+                ((NumOfAccFlowsTotal = $NumOfAccFlowsTotal + $NumOfAccFlows))
+                ((NumOfActFlowsTotal = $NumOfActFlowsTotal + $NumOfActFlows))
+                ((V4NumOfFlowsTotal = $V4NumOfFlowsTotal + $V4NumOfFlows))
+                ((V4NumOfTcpFlowsTotal = $V4NumOfTcpFlowsTotal + $V4NumOfTcpFlows))
+                ((V4NumOfAccFlowsTotal = $V4NumOfAccFlowsTotal + $V4NumOfAccFlows))
+                ((V4NumOfActFlowsTotal = $V4NumOfActFlowsTotal + $V4NumOfActFlows))
+                ((V6NumOfFlowsTotal = $V6NumOfFlowsTotal + $V6NumOfFlows))
+                ((V6NumOfTcpFlowsTotal = $V6NumOfTcpFlowsTotal + $V6NumOfTcpFlows))
+                ((V6NumOfAccFlowsTotal = $V6NumOfAccFlowsTotal + $V6NumOfAccFlows))
+                ((V6NumOfActFlowsTotal = $V6NumOfActFlowsTotal + $V6NumOfActFlows))
+                wanInRateTotal=$(echo "$wanInRateTotal + $wanInRate" | bc -l)
+                lanInRateTotal=$(echo "$lanInRateTotal + $lanInRate" | bc -l)
+                wanOutRateTotal=$(echo "$wanOutRateTotal + $wanOutRate" | bc -l)
+                lanOutRateTotal=$(echo "$lanOutRateTotal + $lanOutRate" | bc -l)
+                v4wanInRateTotal=$(echo "$v4wanInRateTotal + $v4wanInRate" | bc -l)
+                v4lanInRateTotal=$(echo "$v4lanInRateTotal + $v4lanInRate" | bc -l)
+                v4wanOutRateTotal=$(echo "$v4wanOutRateTotal + $v4wanOutRate" | bc -l)
+                v4lanOutRateTotal=$(echo "$v4lanOutRateTotal + $v4lanOutRate" | bc -l)
+                v6wanInRateTotal=$(echo "$v6wanInRateTotal + $v6wanInRate" | bc -l)
+                v6lanInRateTotal=$(echo "$v6lanInRateTotal + $v6lanInRate" | bc -l)
+                v6wanOutRateTotal=$(echo "$v6wanOutRateTotal + $v6wanOutRate" | bc -l)
+                v6lanOutRateTotal=$(echo "$v6lanOutRateTotal + $v6lanOutRate" | bc -l)
+                ((NfBypassTotal = $NfBypassTotal + $NfBypass))
+                ((wanOutValTotal = $wanOutValTotal + $wanOutVal))
+                ((lanInValTotal = $lanInValTotal + $lanInVal))
+                ((v4wanOutValTotal = $v4wanOutValTotal + $v4wanOutVal))
+                ((v4lanInValTotal = $v4lanInValTotal + $v4lanInVal))
+                ((v6wanOutValTotal = $v6wanOutValTotal + $v6wanOutVal))
+                ((v6lanInValTotal = $v6lanInValTotal + $v6lanInVal))
+            fi
+            
+			cmd="$cmd echo \"engine#$eNum:\";"
+			dump_flow
+			[ $VER_STAGE -ge 33 ] && {
+				dump_ipv4_flow
+	    		dump_ipv6_flow
+	    	}
+            cmd="$cmd /usr/bin/printf \"\n\";"
+            ((eNum = $eNum + 1))
+            ((NfBypass = 0))
+        done
+        if [ $CPUNUM -gt 1 ]; then
+            cmd="$cmd echo \"Total:\";"
+			dump_total_flow
+			[ $VER_STAGE -ge 33 ] && {
+				dump_total_ipv4_flow
+				dump_total_ipv6_flow
+			}
+            cmd="$cmd /usr/bin/printf \"\n\";"
+            echo
+        fi
+        clear
+        eval $cmd
+        sleep $CALC_ITV
+        ((count = $count + $CALC_ITV))
+    done
+}
+
+getVerStage
+[ $VER_STAGE -eq 1 ] && {
+	echo 'Not available for this version!'
+	exit 1
+}
+getCpuNum
+showStats $1
+lotServer/apxfiles/bin/setConfig.sh0000644000000000000000000001514513435474612016420 0ustar  rootroot#!/bin/bash
+# Copyright (C) 2015 AppexNetworks
+# Author:	Len
+# Date:		Aug, 2015
+
+ROOT_PATH=/appex
+PRODUCT_NAME=LotServer
+
+[ -f $ROOT_PATH/etc/config ] || { echo "Missing file: $ROOT_PATH/etc/config"; exit 1; }
+. $ROOT_PATH/etc/config 2>/dev/null
+#KILLNAME=$(echo $(basename $apxexe) | sed "s/-\[.*\]//")
+#[ -z "$KILLNAME" ] && KILLNAME="acce-";
+KILLNAME=acce-[0-9.-]+\[.*\]
+pkill -0 $KILLNAME 2>/dev/null
+[ $? -eq 0 ] || {
+    echo "$PRODUCT_NAME is NOT running!"
+    exit 1
+}
+
+help() {
+	echo "Usage: $0 <config> <value1> [value2 ... [valueN]]"
+	echo ""
+	echo "e.g. $0 wanIf eth0"
+}
+
+checkIPv4() { 
+    local _ip    
+    local _ret    
+  
+    for _ip in $@    
+    do  
+        _ret=$(echo "$_ip" | awk -F '.' '{ if(NF!=4 || $1<0 || $2<0|| $3<0 ||$4<0|| $1>255 || $2>255 || $3>255 || $4>255) print 1; else print 0  }')
+        return $_ret
+    done
+}
+
+getIPv6Hex() {
+    local _ipv6=$1
+    local _v6
+    local _suffix
+    local _pre
+    local _mid
+    local _last
+    local _oldLFS
+    local _p1
+    local _p2
+    local _i
+    local _k=0
+
+    _v6=${_ipv6%/*}
+    _suffix=${_ipv6#*/}
+
+    # may be IPv4 mapped address
+    [ "${_v6:0:7}" == "::ffff:" -o "${_v6:0:7}" == "::FFFF:" ] && {
+        _p1=${_v6:7}
+
+        checkIPv4 $_p1
+        [ $? -eq 0 ] && {
+            _p1=$(echo "$_p1" | awk -F'.' '{printf "%02X%02X%02X%02X", $1, $2, $3, $4}')
+            echo "00000000000000000000FFFF$_p1/$_prefix"
+            return
+        }
+    }
+    if [[ $_v6 =~ "::" ]]; then
+        _p1=${_v6%::*}
+        _p2=${_v6#*::}
+
+        _oldIFS=$IFS
+        IFS=":" 
+
+        for _p in $_p1; do
+            _pre=$_pre$(printf "%04x" 0x$_p | tr [a-z] [A-Z])
+            _k=$(expr $_k + 1)
+        done
+
+        for _p in $_p2; do
+            _last=$_last$(printf "%04x" 0x$_p | tr [a-z] [A-Z])
+            _k=$(expr $_k + 1)
+        done
+        IFS=$_oldIFS
+
+        _k=$(expr 8 - $_k)
+        for ((_i=0;_i<_k;_i++)); do
+            _mid=${_mid}0000
+        done
+
+        echo $_pre$_mid$_last/$_suffix
+    else
+        _p1=${_v6%::*}
+
+        _oldIFS=$IFS
+        IFS=":" 
+        for _p in $_p1; do
+            _pre=$_pre$(printf "%04x" 0x$_p | tr [a-z] [A-Z])
+        done
+        IFS=$_oldIFS
+
+        echo $_pre/$_suffix
+    fi
+}
+
+formatIPv4() {
+	local word
+	local line=''
+	local prefix
+	local suffix
+	[[ -n "$@" ]] || return
+	for word in $@; do
+		[[ "$word" = "1" || "$word" = "0" ]] && continue
+		prefix=${word%/*}
+		suffix=${word#*/}
+		word=$(printf "%08X" 0x$prefix)
+		line="$line $word/$suffix"
+	done
+	line=$(echo $line | xargs -n 1 | sort)
+	echo $line
+}
+
+formatIPv6() {
+	local word
+	local line=''
+	local prefix
+	local suffix
+	[[ -n "$@" ]] || return
+	for word in $@; do
+		[[ "$word" = "1" || "$word" = "0" ]] && continue
+		logger $word
+		[ "$word" != "${word//:}" ] && word=$(getIPv6Hex $word)
+		logger $word
+		line="$line $word"
+	done
+	line=$(echo $line | xargs -n 1 | sort)
+	echo $line
+}
+
+item=$1
+shift
+value=$@
+
+[[ -z "$item" || -z "$value" || "$item" = "-help" || "$item" = "--help" ]] && {
+	help
+	exit 1
+}
+if [ $usermode -eq 0 ]; then
+	[ -f /proc/net/appex/$item ] || grep "$item:" /proc/net/appex/cmd >/dev/null || [ $item = "pcapFilterSplit" ] || {
+		echo "Invalid config! "
+		exit 1
+	}
+	
+	for engine in $(ls -d /proc/net/appex*); do
+		if [ -f $engine/$item ]; then
+			echo "$value" > $engine/$item 2>/dev/null
+			if [ $item = 'wanIf' ]; then
+				saved=$(cat $engine/$item 2>/dev/null)
+				saved=$(echo $saved)
+		    	for if in $value; do
+		    		[ "${saved/$if}" == "$saved" ] && {
+		    			echo "Failed to write configuration!"
+				    	exit 1
+		    		}
+		    	done
+			else
+				saved=$(cat $engine/$item 2>/dev/null)
+				saved=$(echo $saved)
+				[ "$value" != "$saved" ] && {
+					echo "Failed to write configuration!"
+					exit 1
+				}
+			fi
+		else
+			if [ "$item" = 'lanSegment' ]; then
+				PATTERN='^[0-9A-Fa-f]{7,8}/[0-9]{1,2}(\s{1,}[0-9A-Fa-f]{7,8}/[0-9]{1,2}){0,}(\s{1,}[0-1]){0,1}$'
+				[[ "$value" =~ $PATTERN ]] || {
+					echo "Failed to write configuration: lanSegment" >&2
+					exit 1
+				}
+				echo "$item: $value" > $engine/cmd 2>/dev/null
+				saved=$(awk -F': ' "/$item(\(.*\))?:/ {print \$2}" $engine/cmd 2>/dev/null)
+				saved=$(formatIPv4 $saved)
+				lanSegmentV4Fmt=$(formatIPv4 $value)
+				[[ "$saved" != "$lanSegmentV4Fmt" ]] && {
+					echo "Failed to write configuration: lanSegment" >&2
+					stop >/dev/null 2>&1
+					exit 1
+				}
+			elif [ "$item" = 'lanSegmentV6' ]; then
+				nf=`echo "$value" | awk '{print NF}'`
+				for _tmp in $value; do
+					((nf--))
+					ipcalc -cs6 "$_tmp"
+					if [[ $? -ne 0 ]]; then
+						if [[ $_tmp = "0" || $_tmp = "1" ]]; then
+							if [[ $nf -ne 0 ]]; then
+								echo "Failed to write configuration: lanSegmentV6" >&2
+								exit 1
+							fi
+						else
+							echo "Failed to write configuration: lanSegmentV6" >&2
+							exit 1
+						fi
+					fi
+				done
+				echo "$item: $value" > $engine/cmd 2>/dev/null
+				saved=$(awk -F': ' "/$item(\(.*\))?:/ {print \$2}" $engine/cmd 2>/dev/null)
+				saved=$(formatIPv6 $saved)
+				lanSegmentV6Fmt=$(formatIPv6 $value)
+				[[ "$saved" != "$lanSegmentV6Fmt" ]] && {
+					echo "Failed to write configuration: lanSegmentV6" >&2
+					stop >/dev/null 2>&1
+					exit 1
+				}
+			else
+				echo "$item: $value" > $engine/cmd 2>/dev/null
+				saved=$(awk -F': ' "/$item(\(.*\))?:/ {print \$2}" $engine/cmd 2>/dev/null)
+				[ "$value" != "$saved" ] && {
+					echo "Failed to write configuration!"
+					exit 1
+				}
+				# add mutual exclusion for ipv4Only & ipv6Only here
+				if [ "$item" = "ipv4Only" -a "$value" = "1" ]; then
+					echo "ipv6Only: 0" > $engine/cmd 2>/dev/null
+				elif [ "$item" = "ipv6Only" -a "$value" = "1" ]; then
+					echo "ipv4Only: 0" > $engine/cmd 2>/dev/null
+				fi
+			fi
+		fi
+	done
+else
+	for i in $($apxexe | sed 's/\[.*\]//g'); do
+		[[ "$i" != "$item" ]] && continue
+		$apxexe /0/$item="$value"
+		saved=$($apxexe /0/$item)
+		saved=$(echo $saved)
+		if [ $item = 'wanIf' ]; then
+	    	for if in $value; do
+	    		[ "${saved/$if}" == "$saved" ] && {
+	    			echo "Failed to write configuration!"
+			    	exit 1
+	    		}
+	    	done
+		else
+			[ "$value" != "$saved" ] && {
+				echo "Failed to write configuration!"
+				exit 1
+			}
+		fi
+		exit 0
+	done
+	
+	for i in $($apxexe /0/cmd | awk -F: '{print $1}') pcapFilterSplit; do
+		[[ "$i" != "$item" ]] && continue
+		$apxexe /0/cmd="$item $value"
+		
+		[ $item = 'lanSegmentV6' ] && continue
+		
+		saved=$($apxexe /0/cmd | awk -F': ' "/$item(\(.*\))?:/ {print \$2}")
+		if [ $item = 'lanSegment' ]; then
+			[[ ${saved#$value} == $saved && ${value#$saved} == $value ]] && {
+				echo "Failed to write configuration: lansegment"
+				exit 1
+			}
+		else
+			[ "$value" != "$saved" ] && {
+				echo "Failed to write configuration!"
+				exit 1
+			}
+		fi
+		exit 0
+	done
+	echo "Invalid config! "
+	exit 1
+	
+fi
+lotServer/apxfiles/bin/update.sh0000644000000000000000000001664213435474612015764 0ustar  rootroot#!/bin/echo Warning: this is a library file, can not be execute directly:
+# Copyright (C) 2017 AppexNetworks
+# Author:	Len
+# Date:		May, 2017
+
+getSysInfo() {
+	# Get interface
+	[ -f /proc/net/dev ] && {
+		if grep 'eth0:' /proc/net/dev >/dev/null; then
+			IFNAME=eth0
+		else
+			#exclude: lo sit stf gif dummy vmnet vir        
+			IFNAME=`cat /proc/net/dev | awk -F: 'function trim(str){sub(/^[ \t]*/,"",str); sub(/[ \t]*$/,"",str); return str } NR>2 {print trim($1)}'  | grep -Ev '^lo|^sit|^stf|^gif|^dummy|^vmnet|^vir|^gre|^ipip|^ppp|^bond|^tun|^tap|^ip6gre|^ip6tnl|^teql' | awk 'NR==1 {print $0}' `
+		fi
+	}
+	[ -z "$IFNAME" ] && {
+	    echo "Network interface not found! (error code: 100)"
+	    return 1
+	}
+	
+	# Get kernel info
+	KER_VER=`uname -r`
+	SMP=`uname -a | grep SMP`
+	X86_64=`uname -a | grep -i x86_64`
+	
+	[ -f /etc/os-release ] && {
+		local NAME VERSION VERSION_ID PRETTY_NAME ID ANSI_COLOR CPE_NAME BUG_REPORT_URL HOME_URL ID_LIKE
+		eval $(cat /etc/os-release) 2>/dev/null
+		[ -n "$NAME" ] && DIST=$NAME
+		[ -n "$VERSION_ID" ] && REL=$VERSION_ID
+		[ -z "$REL" -a -n "$VERSION" ] && {
+			for i in $VERSION; do
+				ver=${i//./}
+				if [ "$ver" -eq "$ver" 2> /dev/null ]; then
+					REL=$i
+					break
+				fi
+			done
+		}
+	}
+	[ -z "$DIST" -o -z "$REL" ] && {
+		[ -f /etc/redhat-release ] && line=$(cat /etc/redhat-release)
+		[ -f /etc/SuSE-release ] && line=$(cat /etc/SuSE-release)
+		[ -z "$line" ] && line=`cat /etc/issue`
+		for i in $line; do
+		    ver=${i//./}
+		    if [ "$ver" -eq "$ver" 2> /dev/null ]; then
+		        REL=$i
+		        break
+		    fi
+		    [ "$i" = "release" -o "$i" = "Welcome" -o "$i" = "to" ] || DIST="$DIST $i"
+		done
+	}
+	DIST=`echo $DIST | sed 's/^[ \s]*//g' | sed 's/[ \s]*$//g'`
+	DIST=`echo $DIST | sed 's/[ ]/_/g'`
+	MEM=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+}
+
+function modVersion() {
+	[ -f "$1" ] || return 1
+	modinfo $1 | awk '/^version:/ {print $2}'
+}
+
+function update() {
+	echo
+	echo "************************************************************"
+	echo "*                                                          *"
+	echo "*              AppEx LotServer Updater (1.2)               *"        
+	echo "*                                                          *"
+	echo "************************************************************"
+	echo
+	
+	# Locate wget
+	which wget >/dev/null 2>&1
+	[ $? -ne 0 ] && {
+		echo 'ERROR(WGET): "wget" not found, please install "wget" using "yum install wget" or "apt-get install wget" according to your linux distribution'
+		exit
+	}
+	
+	KER_VER=''
+	SMP=''
+	X86_64=''
+	DIST=""
+	REL=""
+	MEM=""
+	IFNAME=eth0
+	
+	[ -z "$email" -o -z "$serial" ] && {
+	    echo "Missing parameters in config file: email or serial"
+	    exit 1
+	}
+	getSysInfo
+	acceVer=$(echo $apxexe | awk -F- '{print $2}')
+	para="e=$email&s=$serial&l=$DIST&v=$REL&k=$KER_VER&i=$IFNAME&b=${X86_64:+1}&m=$MEM&accv=$acceVer&iv=$installerID&rtt=$rtt"
+	url="http://$HOST/ls_update.jsp?ml=$email&ml2=$serial"
+	
+	out=apxhttp.$$
+	rm -rf $ROOT_PATH/update.tar.gz 2>/dev/null
+	echo "Authenticating user..."
+	wget --post-data $para -o $out -O $ROOT_PATH/update.tar.gz $url
+	downStat=0
+	[ -f $ROOT_PATH/update.tar.gz ] && {
+	    filesize=0
+	    stat=`which stat`
+	    [ -n "$stat" ] && filesize=`stat -c "%s" $ROOT_PATH/update.tar.gz`
+	    [ -z "$stat" ] && filesize=`ls -l $ROOT_PATH/update.tar.gz | awk '{print $5}'`
+	    [ $filesize -gt 100 ] && downStat=1
+	}
+	if [ $downStat = 1 ]; then
+	    sleep 1
+	    [ -d $ROOT_PATH/.tmp ] || mkdir -p $ROOT_PATH/.tmp
+	    tar xzvf $ROOT_PATH/update.tar.gz -C $ROOT_PATH/.tmp 1>/dev/null 2>/dev/null
+	    local keepKo=0
+	    local existKo=$rttko
+	    local newKo=$(ls $ROOT_PATH/.tmp/bin/acce-*.rtt.ko 2>/dev/null)
+	    [ -n "$existKo" -a -n "$newKo" ] && {
+	    	local existKoVer=$(modVersion $existKo)
+	    	local newKoVer=$(modVersion $newKo)
+	    	[ -n "$existKoVer" -a -n "$newKoVer" -a "$existKoVer" = "$newKoVer" ] && keepKo=1
+	    }
+	    
+	    dtstr=$(date +%Y-%m-%d_%H-%M-%S)
+	    mkdir -p $ROOT_PATH/.bin_$dtstr $ROOT_PATH/.etc_$dtstr
+	    if [ $keepKo -eq 0 ]; then
+	    	mv -f $ROOT_PATH/bin/* $ROOT_PATH/.bin_$dtstr/
+	    else
+	    	#shopt -s extglob
+	    	#/bin/mv -f $ROOT_PATH/bin/!($existKo) $ROOT_PATH/.bin_$dtstr/
+	    	find $ROOT_PATH/bin/ -type f -name "*[^(.rtt.ko)]" -exec mv {} $ROOT_PATH/.bin_$dtstr/ \;
+	    	rm -f $newKo
+	    fi
+	    mv -f $ROOT_PATH/etc/* $ROOT_PATH/.etc_$dtstr/
+
+	    cp -f $ROOT_PATH/.tmp/bin/* $ROOT_PATH/bin/
+	    cp -f $ROOT_PATH/.tmp/etc/* $ROOT_PATH/etc/
+	    chmod +x $ROOT_PATH/bin/*
+	    
+	    [ -f $ROOT_PATH/.etc_$dtstr/clsf ] && cp -f $ROOT_PATH/.etc_$dtstr/clsf $ROOT_PATH/etc/
+	    while read _line; do
+			item=$(echo $_line | awk -F= '/^[^#]/ {print $1}')
+			val=$(echo $_line | awk -F= '/^[^#]/ {print $2}' | sed 's#\/#\\\/#g')
+			[ -n "$item" -a "$item" != "accpath" -a "$item" != "apxexe" -a "$item" != "rttko" -a \
+				 "$item" != "apxlic" -a "$item" != "installerID" -a "$item" != "email" -a "$item" != "serial" ] && {
+				if [ -n "$(grep $item $ROOT_PATH/etc/config)" ]; then
+					sed -i "s/^#\{0,1\}$item=.*/$item=$val/" $ROOT_PATH/etc/config
+				else
+					sed -i "/^engineNum=.*/a$item=$val" $ROOT_PATH/etc/config
+				fi
+			}
+			[ $keepKo -eq 1 -a "$item" = "rttko" ] && {
+				sed -i "s/^#\{0,1\}$item=.*/$item=$val/" $ROOT_PATH/etc/config
+			}
+		done<$ROOT_PATH/.etc_$dtstr/config
+		
+		
+	    
+	    [ -f $ROOT_PATH/.tmp/expiredDate ] && {
+			echo -n "Expired Date: "
+	    	cat $ROOT_PATH/.tmp/expiredDate
+	    	echo
+	  	}
+	    rm -rf $ROOT_PATH/.tmp 2>/dev/null
+	    [ "$1" != "-grace" ] && {
+	    	echo -n "Restarting $PRODUCT_NAME..."
+	    	. $ROOT_PATH/etc/config 2>/dev/null
+	    	getVerStage
+	    	if [ $keepKo -eq 0 ]; then
+	    		restart all
+	    	else
+	    		restart
+	    	fi
+	    		
+		}
+	    echo "Done!"
+	else
+	    grep 401 $out >/dev/null 2>&1 && {
+	        echo "Invalid Email! (error code: 401)"
+	        rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	        return 1
+	    }
+	    grep 403 $out >/dev/null 2>&1 && {
+	        echo "$PRODUCT_NAME is up to date."
+	        rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	        return 1
+	    }
+	    grep 405 $out >/dev/null 2>&1 && {
+	        echo "Your trial licenses have been used out! (error code: 405)"
+	        rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	        return 1
+	    }
+	    grep 410 $out >/dev/null 2>&1 && {
+			echo "License does not exist! (error code: 410)"
+			rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	        return 1
+		}
+	    grep 417 $out >/dev/null 2>&1 && {
+	        echo "Your license has expired! (error code: 417)"
+	        rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	        return 1
+	    }
+	    grep 501 $out >/dev/null 2>&1 && {
+	        echo "No available versions found for your server! (error code: 501)"
+	        echo "More information can be found from: http://$HOST/ls.do?m=availables"
+	        rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	        return 1
+	    }
+	    grep 502 $out >/dev/null 2>&1 && {
+	        echo "No available versions found for your server! (error code: 502)"
+	        echo "More information can be found from: http://$HOST/ls.do?m=availables"
+	        rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	        return 1
+	    }
+	    grep 503 $out >/dev/null 2>&1 && {
+	        echo "The license of this server is obsolete! (error code: 503)"
+	        rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	        return 1
+	    }
+    	echo "Error occur! (error code: 400)"
+    	cat $out
+    	rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+	    return 1
+	fi
+	rm -rf $out $ROOT_PATH/update.tar.gz 2>/dev/null
+}lotServer/apxfiles/bin/showConfig.sh0000644000000000000000000000644213435474612016605 0ustar  rootroot#!/bin/bash
+# Copyright (C) 2015 AppexNetworks
+# Author:	Len
+# Date:		Aug, 2015
+
+ROOT_PATH=/appex
+PRODUCT_NAME=LotServer
+
+[ -f $ROOT_PATH/etc/config ] || { echo "Missing file: $ROOT_PATH/etc/config"; exit 1; }
+. $ROOT_PATH/etc/config 2>/dev/null
+#KILLNAME=$(echo $(basename $apxexe) | sed "s/-\[.*\]//")
+#[ -z "$KILLNAME" ] && KILLNAME="acce-";
+KILLNAME=acce-[0-9.-]+\[.*\]
+pkill -0 $KILLNAME 2>/dev/null
+[ $? -eq 0 ] || {
+    echo "$PRODUCT_NAME is NOT running!"
+    exit 1
+}
+
+HL_START="\033[37;40;1m"
+HL_END="\033[0m" 
+
+[ -z "$1" ] && {
+	echo "Usage: $0 {config | all | help}"
+	echo ""
+	echo -e "$0 help\t\tshow available config items"
+	echo -e "$0 all\t\tshow all"
+	echo "e.g. $0 wanIf"
+	exit 1
+}
+
+case "$1" in
+	help)
+		printf "${HL_START}Available config items:${HL_END}\n"
+		items=$(ls /proc/net/appex/ 2>/dev/null || $apxexe | sed 's/\[.*\]//g')
+		for i in $items; do
+			[[ "$i" = "." || "$i" = ".." || "$i" = "cmd" || "$i" = "version" || "$i" = "ioctl" || "$i" = "stats" \
+				|| "$i" = "byteCacheIoFails" || "$i" = "logLevel" || "$i" = "engine" || "$i" = "hz" ]] && {
+				continue
+			}
+			echo -en "$i\n"
+		done
+		items=$(cat /proc/net/appex/cmd 2>/dev/null | awk -F: '{print $1}')
+		[ -z "$items" ] && items=$($apxexe /0/cmd | awk -F: '{print $1}')
+		for i in $items; do
+			[ "$i" = "wanState" ] && continue
+			echo -en "${i/(1~16)/}\n"
+		done
+	;;
+    all)
+    	if [ $usermode -eq 0 ]; then
+	    	for engine in $(ls -d /proc/net/appex*); do
+	    		printf "${HL_START}%s:${HL_END}\n" $(basename $engine)
+	    		for i in $(ls $engine/); do
+					[[ "$i" = "." || "$i" = ".." || "$i" = "cmd" || "$i" = "version" || "$i" = "ioctl" || "$i" = "stats" \
+						|| "$i" = "byteCacheIoFails" || "$i" = "logLevel" || "$i" = "engine" || "$i" = "hz" ]] && {
+						continue
+					}
+					value=$(cat $engine/$i)
+					value=$(echo $value)
+					echo -en "$i: $value\n"
+				done
+				cat $engine/cmd | grep -v wanState
+				echo
+	    	done
+    	else
+    		items=$($apxexe | sed 's/\[.*\]//g')
+			for i in $items; do
+				[[ "$i" = "." || "$i" = ".." || "$i" = "cmd" || "$i" = "version" || "$i" = "ioctl" || "$i" = "stats" \
+					|| "$i" = "byteCacheIoFails" || "$i" = "logLevel" || "$i" = "engine" || "$i" = "hz" || "$i" = "guistats" ]] && {
+					continue
+				}
+				echo -en "$i: $($apxexe /0/$i)\n"
+			done
+			$apxexe /0/cmd | grep -v wanState
+    	fi
+    ;;
+    *)
+    	if [ $usermode -eq 0 ]; then
+	    	[ -f /proc/net/appex/$1 ] || grep "$1:" /proc/net/appex/cmd >/dev/null || [ $1 = "pcapFilterSplit" ] || {
+	    		echo "Invalid config! "
+	    		exit 1
+	    	}
+	    	for engine in $(ls -d /proc/net/appex*); do
+	    		printf "${HL_START}%s:${HL_END}\n" $(basename $engine)
+	    		if [ -f $engine/$1 ]; then
+					value=$(cat $engine/$1)
+					value=$(echo $value)
+					echo -en "$1: $value\n"
+				else
+					cat $engine/cmd | grep $1
+				fi
+				echo
+	    	done
+	    else
+	    	items=$($apxexe | sed 's/\[.*\]//g')
+			for i in $items; do
+				[[ "$i" != "$1" ]] && {
+					continue
+				}
+				echo -en "$i: $($apxexe /0/$i)\n"
+				exit 0
+			done
+			items=$($apxexe /0/cmd | awk -F: '{print $1}')
+			for i in $items; do
+				[[ "$i" != "$1" ]] && {
+					continue
+				}
+				$apxexe /0/cmd | grep $1
+				exit 0
+			done
+			[ "$1" = "pcapFilterSplit" ] && {
+				$apxexe /0/cmd | grep pcapFilterSplit
+				exit 0
+			}
+			[ "$i" != "$1" ] && echo "Invalid config! "
+	    fi
+    ;;
+  esaclotServer/apxfiles/bin/lotServer.sh0000644000000000000000000016437013435474612016471 0ustar  rootroot#!/bin/bash
 # Copyright (C) 2017 AppexNetworks
 # Author:	Len
 # Date:		May, 2017
@@ -1550,9 +3041,9 @@ function freeIf() {
 
 function disp_usage() {
 	if [ $VER_STAGE -eq 1 ]; then
-		echo "Usage: $0 {start | stop | reload | restart | status | uninstall}"
+		echo "Usage: $0 {start | stop | reload | restart | status | renewLic | update | uninstall}"
 	else
-		echo "Usage: $0 {start | stop | reload | restart | status | stats | uninstall}"
+		echo "Usage: $0 {start | stop | reload | restart | status | stats | renewLic | update | uninstall}"
 	fi
 	echo
 	echo -e "  start\t\t  start $PRODUCT_NAME"
@@ -1562,6 +3053,8 @@ function disp_usage() {
 	echo -e "  status\t  show $PRODUCT_NAME running status"
 	[ $VER_STAGE -gt 1 ] && echo -e "  stats\t\t  show realtime connection statistics"
 	echo
+	echo -e "  renewLic\t  update license file"
+	echo -e "  update\t  update $PRODUCT_NAME"
 	echo -e "  uninstall\t  uninstall $PRODUCT_NAME"
 	exit 1
 }
@@ -2378,6 +3871,24 @@ case "$1" in
    		trap - 1 2 3 6 9 15
    		$ROOT_PATH/bin/utils.sh $2
    		;;
+   	renewLic|renew)
+   		echo $$ > /var/run/$PRODUCT_ID.pid
+   		shift
+   		. $ROOT_PATH/bin/renewLic.sh
+   		renew $@
+   		return_var=$?
+   		[ -f /var/run/$PRODUCT_ID.pid ] && rm -f /var/run/$PRODUCT_ID.pid
+   		exit $return_var
+   		;;
+   	update|up)
+   		echo $$ > /var/run/$PRODUCT_ID.pid
+   		shift
+   		. $ROOT_PATH/bin/update.sh
+   		update $@
+   		return_var=$?
+   		[ -f /var/run/$PRODUCT_ID.pid ] && rm -f /var/run/$PRODUCT_ID.pid
+   		exit $return_var
+   		;;
    	uninstall|uninst)
    		shift
    		echo $$ > /var/run/$PRODUCT_ID.pid
@@ -2388,1230 +3899,117 @@ case "$1" in
 	 	disp_usage
 		;;
 esac
-lotServer/apxfiles/bin/utils.sh0000644000000000000000000004626013435474612015641 0ustar  rootroot#!/bin/bash
-# Copyright (C) 2017 AppexNetworks
-# Author:	Len
-# Date:		May, 2017
+lotServer/apxfiles/etc/0000755000000000000000000000000013435676247014150 5ustar  rootrootlotServer/apxfiles/etc/config0000644000000000000000000000500413435474612015327 0ustar  rootroot#!/bin/echo Warning: this is a library file, can not be execute directly:
+########################################################
+#                                                      #
+#             LotServer Configuration File             #
+#                                                      #
+########################################################
+
+# Format: config="value"
+# Note that spaces are not allowed before and after the equal sign
+
+#------------------------------------------------------#
+#     below config items take effect after reload      #
+#------------------------------------------------------#
+accif="eth0"
+lanif=""
+acc="1"
+advacc="1"
+advinacc="0"
+wankbps="1000000"
+waninkbps="1000000"
+csvmode="0"
+highcsv="0"
+subnetAcc="0"
+maxmode="0"
+maxTxMinSsThresh="1048575"
+maxTxEffectiveMS="0"
+maxAccFlowTxKbps="0"
+pcapEnable="0"
+bypassOverFlows="1"
+initialCwndWan="22"
+maxCwndWan=""
+l2wQLimit="256 2048"
+w2lQLimit="256 2048"
+shrinkPacket="0"
+retranWaitListMS="32"
+halfCwndMinSRtt="500"
+halfCwndLossRateShift="3"
+shaperEnable="1"
+tcpOnly="1"
+smBurstMS="16"
+smBurstMin="16000"
+smBurstTolerance="32768"
+flowShortTimeout="30000"
+nic_offload="0"
+rsc="1"
+gso="1"
+ultraBoostWin="0"
+minSsThresh="8 24"
+dbcRttThreshMS=""
+smMinKbps=""
+lanSegment=""
+lanSegmentV6=""
+txCongestObey="1"
+taskSchedDelay="100 100"
+configTimeout="30"
+tcpFlags="0x0"
+udptun=""
+synRetranMS="0"
+shrinkOSWmem="0"
+mpoolMaxCache="245600000"
+initialCwndLan="1024"
+lttMaxDelayMS="0 500"
+halfCwndLowLimit="65535"
+
+#------------------------------------------------------#
+#     below config items take effect after restart     #
+#------------------------------------------------------#
+engineNum="0"
+accppp="0"
+shortRttMS="0"
+packetWrapper="256"
+pmtu=""
+detectInterrupt="0"
+# byte cache
+byteCacheEnable="0"
+dataCompEnable="0"
+httpCompEnable="1"
+byteCacheMemory="250" #MB
+byteCacheDisk="0" #MB
+diskDev="/var/AppEx_Cache"
+dropCache="0"
+
+# 0:not change, 1: on, 2: off
+txcsum="0" 
+rxcsum="0"
+
 #
-
-ROOT_PATH=/appex
-PRODUCT_NAME=LotServer
-
-[ -f $ROOT_PATH/etc/config ] || { echo "Missing file: $ROOT_PATH/etc/config"; exit 1; }
-. $ROOT_PATH/etc/config 2>/dev/null
-
-# Locate bc
-BC=`which bc`
-[ -z "$BC" ] && {
-    echo "bc not found, please install \"bc\" using \"yum install bc\" or \"apt-get install bc\" according to your linux distribution"
-    exit 1
-}
-
-KILLNAME=$(echo $(basename $apxexe) | sed "s/-\[.*\]//")
-[ -z "$KILLNAME" ] && KILLNAME="acce-";
-KILLNAME=acce-[0-9.-]+\[.*\]
-pkill -0 $KILLNAME 2>/dev/null
-[ $? -eq 0 ] || {
-    echo "$PRODUCT_NAME is NOT running!"
-    exit 1
-}
-
-CPUNUM=0
-VER_STAGE=1
-TOTAL_TIME=65535
-CALC_ITV=5 #seconds
-HL_START="\033[37;40;1m"
-HL_END="\033[0m" 
-[ -z "$usermode" ] && usermode=0
-
-ip2long() {
-  local IFS='.'
-  read ip1 ip2 ip3 ip4 <<<"$1"
-  echo $((ip1*(1<<24)+ip2*(1<<16)+ip3*(1<<8)+ip4))
-  #echo "$ip1 $ip2 $ip3 $ip4"
-}
-
-getVerStage() {
-	local verName=$(echo $apxexe | awk -F- '{print $2}')
-	local intVerName=$(ip2long $verName)
-	local boundary=0
-	
-	boundary=$(ip2long '3.11.42.203')
-	[ $intVerName -ge $boundary ] && {
-		#IPv6, and related config
-		VER_STAGE=33
-		return
-	}
-	
-	boundary=$(ip2long '3.9.10.34')
-	[ $intVerName -ge $boundary ] && {
-		#support output session restriction msg
-		VER_STAGE=5
-		return
-	}
-	
-	boundary=$(ip2long '3.9.10.30')
-	[ $intVerName -ge $boundary ] && {
-		#support specify cpuid
-		VER_STAGE=4
-		return
-	}
-	
-	boundary=$(ip2long '3.9.10.23')
-	[ $intVerName -ge $boundary ] && {
-		#support 256 interfaces
-		VER_STAGE=3
-		return
-	}
-	
-	boundary=$(ip2long '3.9.10.10')
-	[ $intVerName -ge $boundary ] && {
-		#support multiple cpu
-		VER_STAGE=2
-		return
-	}
-}
-
-getCpuNum() {
-	[ $usermode -eq 1 ] && {
-		CPUNUM=1
-		return
-	}
-	[ $VER_STAGE -eq 1 ] && {
-		CPUNUM=1
-		return
-	}
-	if [ $VER_STAGE -ge 4 -a -n "$cpuID" ]; then
-		CPUNUM=$(echo $cpuID | awk -F, '{print NF}')
-		#num=`cat /proc/stat | grep cpu | wc -l`
-		#num=`expr $num - 1`
-		#[ $CPUNUM -gt $num ] && echo
-	else
-		num=`cat /proc/stat | grep cpu | wc -l`
-		num=`expr $num - 1`
-		CPUNUM=$num
-		[ -n "$engineNum" ] && {
-			[ $engineNum -gt 0 -a $engineNum -lt $num ] && CPUNUM=$engineNum
-		}
-		X86_64=$(uname -a | grep -i x86_64)
-		[ -z "$X86_64" -a $CPUNUM -gt 4 ] && CPUNUM=4
-	fi
-	[ -n "$1" -a -n "$X86_64" -a $CPUNUM -gt 4 ] && {
-		memTotal=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-		used=$(($CPUNUM * 800000)) #800M
-		left=$(($memTotal - $used))
-		[ $left -lt 2000000 ] && {
-			HL_START="\033[37;40;1m"
-			HL_END="\033[0m"
-			echo -en "$HL_START"
-			echo "$PRODUCT_NAME Warning: $CPUNUM engines will be launched according to the config file. Your system's total RAM is $memTotal(KB), which might be insufficient to run all the engines without performance penalty under extreme network conditions. "
-			echo -en "$HL_END"
-		}    
-	}
-}
-
-initCmd() {
-    eNum=0
-    while [ $eNum -lt $CPUNUM ]; do
-        if [ $usermode -eq 0 ]; then
-        	e=$eNum
-        	[ $e -eq 0 ] && e=''
-	        [ -d /proc/net/appex$e ] && {
-	            echo "displayLevel: 5" > /proc/net/appex$e/cmd
-	        }
-        else
-        	$apxexe /$eNum/cmd="displayLevel 5"
-        fi
-        ((eNum = $eNum + 1))
-    done
-}
-
-dump_flow()
-{
-
-	cmd="$cmd /usr/bin/printf \"total sessions: $HL_START%d$HL_END, \" $NumOfFlows;"
-	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $NumOfTcpFlows;"
-	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $NumOfAccFlows;"
-	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $NumOfActFlows;"
-	#echo
-	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in: $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s \" $wanInRate $wanOutRate;"
-	[ -n "$showLan" ] && {
-		cmd="$cmd /usr/bin/printf \"lan out: $HL_START%.2F$HL_END kbit/s\tlan in:  $HL_START%.2F$HL_END kbit/s \" $lanOutRate $lanInRate;"
-		cmd="$cmd /usr/bin/printf \"retransmission ratio: $HL_START%.1F %%$HL_END\" $outRatio;"
-	}
-	cmd="$cmd /usr/bin/printf \"\n\";"
-}
-
-dump_ipv4_flow()
-{
-	cmd="$cmd /usr/bin/printf \"ipv4 sessions: $HL_START%d$HL_END, \" $V4NumOfFlows;"
-	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $V4NumOfTcpFlows;"
-	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $V4NumOfAccFlows;"
-	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $V4NumOfActFlows;"
-	[ $NfBypass -gt 0 ] && cmd="$cmd /usr/bin/printf \"Short-RTT bypassed packets: $HL_START%d$HL_END\n\" $NfBypass;"
-	#echo
-	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in: $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s \" $v4wanInRate $v4wanOutRate;"
-	[ -n "$showLan" ] && {
-		cmd="$cmd /usr/bin/printf \"lan out: $HL_START%.2F$HL_END kbit/s\tlan in:  $HL_START%.2F$HL_END kbit/s \" $v4lanOutRate $v4lanInRate;"
-		cmd="$cmd /usr/bin/printf \"retransmission ratio: $HL_START%.1F %%$HL_END\" $v4outRatio;"
-	}
-	cmd="$cmd /usr/bin/printf \"\n\";"
-}
-
-dump_ipv6_flow()
-{
-	cmd="$cmd /usr/bin/printf \"ipv6 sessions: $HL_START%d$HL_END, \" $V6NumOfFlows;"
-	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $V6NumOfTcpFlows;"
-	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $V6NumOfAccFlows;"
-	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $V6NumOfActFlows;"
-	#echo
-	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in: $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s \" $v6wanInRate $v6wanOutRate;"
-	[ -n "$showLan" ] && {
-		cmd="$cmd /usr/bin/printf \"lan out: $HL_START%.2F$HL_END kbit/s\tlan in:  $HL_START%.2F$HL_END kbit/s \" $v6lanOutRate $v6lanInRate;"
-		cmd="$cmd /usr/bin/printf \"retransmission ratio: $HL_START%.1F %%$HL_END\" $v6outRatio;"
-	}
-	cmd="$cmd /usr/bin/printf \"\n\";"
-}
-
-dump_total_flow()
-{
-
-	cmd="$cmd /usr/bin/printf \"total sessions: $HL_START%d$HL_END, \" $NumOfFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $NumOfTcpFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $NumOfAccFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $NumOfActFlowsTotal;"
-	#echo
-	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in :  $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s\" $wanInRateTotal $wanOutRateTotal;"
-	[ -n "$showLan" ] && {
-		cmd="$cmd /usr/bin/printf \" lan out: $HL_START%.2F$HL_END kbit/s\tlan in :  $HL_START%.2F$HL_END kbit/s\" $lanOutRateTotal $lanInRateTotal;"
-            	
-		if [ $wanOutValTotal -gt 0 ]; then
-			outRatio=$(echo "($wanOutValTotal - $lanInValTotal) * 100 / $wanOutValTotal" | bc -l)
-		else
-			outRatio=0
-		fi
-		cmd="$cmd /usr/bin/printf \" retransmission ratio: $HL_START%.1F %%$HL_END \" $outRatio;"
-	}
-	cmd="$cmd /usr/bin/printf \"\n\";"
-}
-
-dump_total_ipv4_flow()
-{
-	cmd="$cmd /usr/bin/printf \"ipv4 sessions: $HL_START%d$HL_END, \" $V4NumOfFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $V4NumOfTcpFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $V4NumOfAccFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $V4NumOfActFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"Short-RTT bypassed packets: $HL_START%d$HL_END\n\" $NfBypassTotal;"
-	#echo
-	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in :  $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s\" $v4wanInRateTotal $v4wanOutRateTotal;"
-	[ -n "$showLan" ] && {
-		cmd="$cmd /usr/bin/printf \" lan out: $HL_START%.2F$HL_END kbit/s\tlan in :  $HL_START%.2F$HL_END kbit/s\" $v4lanOutRateTotal $v4lanInRateTotal;"
-            	
-		if [ $v4wanOutValTotal -gt 0 ]; then
-			v4outRatio=$(echo "($v4wanOutValTotal - $v4lanInValTotal) * 100 / $v4wanOutValTotal" | bc -l)
-		else
-			v4outRatio=0
-		fi
-		cmd="$cmd /usr/bin/printf \" retransmission ratio: $HL_START%.1F %%$HL_END \" $v4outRatio;"
-	}
-	cmd="$cmd /usr/bin/printf \"\n\";"
-}
-
-dump_total_ipv6_flow()
-{
-	cmd="$cmd /usr/bin/printf \"ipv6 sessions: $HL_START%d$HL_END, \" $V6NumOfFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"tcp sessions: $HL_START%d$HL_END, \" $V6NumOfTcpFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"accelerated tcp sessions: $HL_START%d$HL_END, \" $V6NumOfAccFlowsTotal;"
-	cmd="$cmd /usr/bin/printf \"active tcp sessions: $HL_START%d$HL_END, \" $V6NumOfActFlowsTotal;"
-#	cmd="$cmd /usr/bin/printf \"Short-RTT bypassed packets: $HL_START%d$HL_END\n\" $NfBypassTotal;"
-	#echo
-	cmd="$cmd /usr/bin/printf \"\${showLan:+wan }in :  $HL_START%.2F$HL_END kbit/s\t\${showLan:+wan }out: $HL_START%.2F$HL_END kbit/s\" $v6wanInRateTotal $v6wanOutRateTotal;"
-	[ -n "$showLan" ] && {
-		cmd="$cmd /usr/bin/printf \" lan out: $HL_START%.2F$HL_END kbit/s\tlan in :  $HL_START%.2F$HL_END kbit/s\" $v6lanOutRateTotal $v6lanInRateTotal;"
-            	
-		if [ $v6wanOutValTotal -gt 0 ]; then
-			v6outRatio=$(echo "($v6wanOutValTotal - $v6lanInValTotal) * 100 / $v6wanOutValTotal" | bc -l)
-		else
-			v6outRatio=0
-		fi
-		cmd="$cmd /usr/bin/printf \" retransmission ratio: $HL_START%.1F %%$HL_END \" $v6outRatio;"
-	}
-	cmd="$cmd /usr/bin/printf \"\n\";"
-}
-
-
-showStats() {
-    initCmd
-    count=0
-    lstTime=$(date +%s)
-    cmd=''
-    showLan=''
-    [ "$1" = "all" ] && showLan=1
-    while [ $count -lt $TOTAL_TIME ]; do
-        eNum=0
-        cmd=''
-        wanInRateTotal=0
-        lanInRateTotal=0
-        wanOutRateTotal=0
-        lanOutRateTotal=0
-        v4wanInRateTotal=0
-        v4lanInRateTotal=0
-        v4wanOutRateTotal=0
-        v4lanOutRateTotal=0
-        v6wanInRateTotal=0
-        v6lanInRateTotal=0
-        v6wanOutRateTotal=0
-        v6lanOutRateTotal=0
-        NumOfFlowsTotal=0
-        NumOfTcpFlowsTotal=0
-        NumOfAccFlowsTotal=0
-        NumOfActFlowsTotal=0
-        V4NumOfFlowsTotal=0
-        V4NumOfTcpFlowsTotal=0
-        V4NumOfAccFlowsTotal=0
-        V4NumOfActFlowsTotal=0
-        V6NumOfFlowsTotal=0
-        V6NumOfTcpFlowsTotal=0
-        V6NumOfAccFlowsTotal=0
-        V6NumOfActFlowsTotal=0
-        NfBypassTotal=0
-        lanInValTotal=0
-        wanOutValTotal=0
-        v4lanInValTotal=0
-        v4wanOutValTotal=0
-        v6lanInValTotal=0
-        v6wanOutValTotal=0
-        while [ $eNum -lt $CPUNUM ]; do
-        	if [ $usermode -eq 0 ]; then
-        		e=$eNum
-	            [ $e -eq 0 ] && e=''
-	            [ -d /proc/net/appex$e ] || {
-	                ((eNum = $eNum + 1))
-	                continue
-	            }
-	            eval $(cat /proc/net/appex$e/stats | egrep '(NumOf.*Flows)|(Bytes)|(NfBypass)' | sed 's/\s*//g')
-        	else
-        		eval $($apxexe /$eNum/stats | egrep '(NumOf.*Flows)|(Bytes)|(NfBypass)' | sed 's/\s*//g')
-        	fi
-	            
-            [ -z "$NumOfFlows" ] && NumOfFlows=0
-            [ -z "$NumOfTcpFlows" ] && NumOfTcpFlows=0
-            [ -z "$NumOfAccFlows" ] && NumOfAccFlows=0
-            [ -z "$NumOfActFlows" ] && NumOfActFlows=0
-            [ -z "$V4NumOfFlows" ] && V4NumOfFlows=0
-            [ -z "$V4NumOfTcpFlows" ] && V4NumOfTcpFlows=0
-            [ -z "$V4NumOfAccFlows" ] && V4NumOfAccFlows=0
-            [ -z "$V4NumOfActFlows" ] && V4NumOfActFlows=0
-            [ -z "$V6NumOfFlows" ] && V6NumOfFlows=0
-            [ -z "$V6NumOfTcpFlows" ] && V6NumOfTcpFlows=0
-            [ -z "$V6NumOfAccFlows" ] && V6NumOfAccFlows=0
-            [ -z "$V6NumOfActFlows" ] && V6NumOfActFlows=0
-            [ -z "$WanInBytes" ] && WanInBytes=0
-            [ -z "$LanInBytes" ] && LanInBytes=0
-            [ -z "$WanOutBytes" ] && WanOutBytes=0
-            [ -z "$LanOutBytes" ] && LanOutBytes=0
-            [ -z "$V4WanInBytes" ] && V4WanInBytes=0
-            [ -z "$V4LanInBytes" ] && V4LanInBytes=0
-            [ -z "$V4WanOutBytes" ] && V4WanOutBytes=0
-            [ -z "$V4LanOutBytes" ] && V4LanOutBytes=0
-            [ -z "$V6WanInBytes" ] && V6WanInBytes=0
-            [ -z "$V6LanInBytes" ] && V6LanInBytes=0
-            [ -z "$V6WanOutBytes" ] && V6WanOutBytes=0
-            [ -z "$V6LanOutBytes" ] && V6LanOutBytes=0
-            [ -z "$NfBypass" ] && NfBypass=0
-            
-            eval wanInPre=\$wan_in_pre_$e
-            eval lanInPre=\$lan_in_pre_$e
-            eval wanOutPre=\$wan_out_pre_$e
-            eval lanOutPre=\$lan_out_pre_$e
-            eval v4wanInPre=\$v4wan_in_pre_$e
-            eval v4lanInPre=\$v4lan_in_pre_$e
-            eval v4wanOutPre=\$v4wan_out_pre_$e
-            eval v4lanOutPre=\$v4lan_out_pre_$e
-            eval v6wanInPre=\$v6wan_in_pre_$e
-            eval v6lanInPre=\$v6lan_in_pre_$e
-            eval v6wanOutPre=\$v6wan_out_pre_$e
-            eval v6lanOutPre=\$v6lan_out_pre_$e
-            
-            wanIn=$WanInBytes
-            lanIn=$LanInBytes
-            wanOut=$WanOutBytes
-            lanOut=$LanOutBytes
-            v4wanIn=$V4WanInBytes
-            v4lanIn=$V4LanInBytes
-            v4wanOut=$V4WanOutBytes
-            v4lanOut=$V4LanOutBytes
-            v6wanIn=$V6WanInBytes
-            v6lanIn=$V6LanInBytes
-            v6wanOut=$V6WanOutBytes
-            v6lanOut=$V6LanOutBytes
-            
-            [ -z "$wanInPre" ] && {
-                wanInPre=$wanIn
-                lanInPre=$lanIn
-                wanOutPre=$wanOut
-                lanOutPre=$lanOut
-            }
-            [ -z "$v4wanInPre" ] && {
-                v4wanInPre=$v4wanIn
-                v4lanInPre=$v4lanIn
-                v4wanOutPre=$v4wanOut
-                v4lanOutPre=$v4lanOut
-            }
-            [ -z "$v6wanInPre" ] && {
-                v6wanInPre=$v6wanIn
-                v6lanInPre=$v6lanIn
-                v6wanOutPre=$v6wanOut
-                v6lanOutPre=$v6lanOut
-            }
-            
-            eval wan_in_pre_$e=$wanIn
-            eval lan_in_pre_$e=$lanIn
-            eval wan_out_pre_$e=$wanOut
-            eval lan_out_pre_$e=$lanOut
-            eval v4wan_in_pre_$e=$v4wanIn
-            eval v4lan_in_pre_$e=$v4lanIn
-            eval v4wan_out_pre_$e=$v4wanOut
-            eval v4lan_out_pre_$e=$v4lanOut
-            eval v6wan_in_pre_$e=$v6wanIn
-            eval v6lan_in_pre_$e=$v6lanIn
-            eval v6wan_out_pre_$e=$v6wanOut
-            eval v6lan_out_pre_$e=$v6lanOut
-
-            wanInVal=$(echo "$wanIn - $wanInPre" | bc -l)
-            lanInVal=$(echo "$lanIn - $lanInPre" | bc -l)
-            wanOutVal=$(echo "$wanOut - $wanOutPre" | bc -l)
-            lanOutVal=$(echo "$lanOut - $lanOutPre" | bc -l)
-            v4wanInVal=$(echo "$v4wanIn - $v4wanInPre" | bc -l)
-            v4lanInVal=$(echo "$v4lanIn - $v4lanInPre" | bc -l)
-            v4wanOutVal=$(echo "$v4wanOut - $v4wanOutPre" | bc -l)
-            v4lanOutVal=$(echo "$v4lanOut - $v4lanOutPre" | bc -l)
-            v6wanInVal=$(echo "$v6wanIn - $v6wanInPre" | bc -l)
-            v6lanInVal=$(echo "$v6lanIn - $v6lanInPre" | bc -l)
-            v6wanOutVal=$(echo "$v6wanOut - $v6wanOutPre" | bc -l)
-            v6lanOutVal=$(echo "$v6lanOut - $v6lanOutPre" | bc -l)
-                                    
-            #calc ratio
-            wanInRate=$(echo "$wanInVal / (128 * $CALC_ITV)" | bc -l)
-            lanInRate=$(echo "$lanInVal / (128 * $CALC_ITV)" | bc -l)
-            wanOutRate=$(echo "$wanOutVal / (128 * $CALC_ITV)" | bc -l)
-            lanOutRate=$(echo "$lanOutVal / (128 * $CALC_ITV)" | bc -l)
-            v4wanInRate=$(echo "$v4wanInVal / (128 * $CALC_ITV)" | bc -l)
-            v4lanInRate=$(echo "$v4lanInVal / (128 * $CALC_ITV)" | bc -l)
-            v4wanOutRate=$(echo "$v4wanOutVal / (128 * $CALC_ITV)" | bc -l)
-            v4lanOutRate=$(echo "$v4lanOutVal / (128 * $CALC_ITV)" | bc -l)
-            v6wanInRate=$(echo "$v6wanInVal / (128 * $CALC_ITV)" | bc -l)
-            v6lanInRate=$(echo "$v6lanInVal / (128 * $CALC_ITV)" | bc -l)
-            v6wanOutRate=$(echo "$v6wanOutVal / (128 * $CALC_ITV)" | bc -l)
-            v6lanOutRate=$(echo "$v6lanOutVal / (128 * $CALC_ITV)" | bc -l)
-            
-            # ratio of lanin wanout #(wanout - lanin) / wanout
-			if [ $wanOutVal -gt 0 ]; then
-				outRatio=$(echo "($wanOutVal - $lanInVal) * 100 / $wanOutVal" | bc -l)
-			else
-				outRatio=0
-			fi
-			if [ $v4wanOutVal -gt 0 ]; then
-				v4outRatio=$(echo "($v4wanOutVal - $v4lanInVal) * 100 / $v4wanOutVal" | bc -l)
-			else
-				v4outRatio=0
-			fi
-			if [ $v6wanOutVal -gt 0 ]; then
-				v6outRatio=$(echo "($v6wanOutVal - $v6lanInVal) * 100 / $v6wanOutVal" | bc -l)
-			else
-				v6outRatio=0
-			fi
-            
-            if [ $CPUNUM -gt 1 ]; then
-                ((NumOfFlowsTotal = $NumOfFlowsTotal + $NumOfFlows))
-                ((NumOfTcpFlowsTotal = $NumOfTcpFlowsTotal + $NumOfTcpFlows))
-                ((NumOfAccFlowsTotal = $NumOfAccFlowsTotal + $NumOfAccFlows))
-                ((NumOfActFlowsTotal = $NumOfActFlowsTotal + $NumOfActFlows))
-                ((V4NumOfFlowsTotal = $V4NumOfFlowsTotal + $V4NumOfFlows))
-                ((V4NumOfTcpFlowsTotal = $V4NumOfTcpFlowsTotal + $V4NumOfTcpFlows))
-                ((V4NumOfAccFlowsTotal = $V4NumOfAccFlowsTotal + $V4NumOfAccFlows))
-                ((V4NumOfActFlowsTotal = $V4NumOfActFlowsTotal + $V4NumOfActFlows))
-                ((V6NumOfFlowsTotal = $V6NumOfFlowsTotal + $V6NumOfFlows))
-                ((V6NumOfTcpFlowsTotal = $V6NumOfTcpFlowsTotal + $V6NumOfTcpFlows))
-                ((V6NumOfAccFlowsTotal = $V6NumOfAccFlowsTotal + $V6NumOfAccFlows))
-                ((V6NumOfActFlowsTotal = $V6NumOfActFlowsTotal + $V6NumOfActFlows))
-                wanInRateTotal=$(echo "$wanInRateTotal + $wanInRate" | bc -l)
-                lanInRateTotal=$(echo "$lanInRateTotal + $lanInRate" | bc -l)
-                wanOutRateTotal=$(echo "$wanOutRateTotal + $wanOutRate" | bc -l)
-                lanOutRateTotal=$(echo "$lanOutRateTotal + $lanOutRate" | bc -l)
-                v4wanInRateTotal=$(echo "$v4wanInRateTotal + $v4wanInRate" | bc -l)
-                v4lanInRateTotal=$(echo "$v4lanInRateTotal + $v4lanInRate" | bc -l)
-                v4wanOutRateTotal=$(echo "$v4wanOutRateTotal + $v4wanOutRate" | bc -l)
-                v4lanOutRateTotal=$(echo "$v4lanOutRateTotal + $v4lanOutRate" | bc -l)
-                v6wanInRateTotal=$(echo "$v6wanInRateTotal + $v6wanInRate" | bc -l)
-                v6lanInRateTotal=$(echo "$v6lanInRateTotal + $v6lanInRate" | bc -l)
-                v6wanOutRateTotal=$(echo "$v6wanOutRateTotal + $v6wanOutRate" | bc -l)
-                v6lanOutRateTotal=$(echo "$v6lanOutRateTotal + $v6lanOutRate" | bc -l)
-                ((NfBypassTotal = $NfBypassTotal + $NfBypass))
-                ((wanOutValTotal = $wanOutValTotal + $wanOutVal))
-                ((lanInValTotal = $lanInValTotal + $lanInVal))
-                ((v4wanOutValTotal = $v4wanOutValTotal + $v4wanOutVal))
-                ((v4lanInValTotal = $v4lanInValTotal + $v4lanInVal))
-                ((v6wanOutValTotal = $v6wanOutValTotal + $v6wanOutVal))
-                ((v6lanInValTotal = $v6lanInValTotal + $v6lanInVal))
-            fi
-            
-			cmd="$cmd echo \"engine#$eNum:\";"
-			dump_flow
-			[ $VER_STAGE -ge 33 ] && {
-				dump_ipv4_flow
-	    		dump_ipv6_flow
-	    	}
-            cmd="$cmd /usr/bin/printf \"\n\";"
-            ((eNum = $eNum + 1))
-            ((NfBypass = 0))
-        done
-        if [ $CPUNUM -gt 1 ]; then
-            cmd="$cmd echo \"Total:\";"
-			dump_total_flow
-			[ $VER_STAGE -ge 33 ] && {
-				dump_total_ipv4_flow
-				dump_total_ipv6_flow
-			}
-            cmd="$cmd /usr/bin/printf \"\n\";"
-            echo
-        fi
-        clear
-        eval $cmd
-        sleep $CALC_ITV
-        ((count = $count + $CALC_ITV))
-    done
-}
-
-getVerStage
-[ $VER_STAGE -eq 1 ] && {
-	echo 'Not available for this version!'
-	exit 1
-}
-getCpuNum
-showStats $1
-lotServer/apxfiles/bin/showConfig.sh0000644000000000000000000000644213435474612016605 0ustar  rootroot#!/bin/bash
-# Copyright (C) 2015 AppexNetworks
-# Author:	Len
-# Date:		Aug, 2015
-
-ROOT_PATH=/appex
-PRODUCT_NAME=LotServer
-
-[ -f $ROOT_PATH/etc/config ] || { echo "Missing file: $ROOT_PATH/etc/config"; exit 1; }
-. $ROOT_PATH/etc/config 2>/dev/null
-#KILLNAME=$(echo $(basename $apxexe) | sed "s/-\[.*\]//")
-#[ -z "$KILLNAME" ] && KILLNAME="acce-";
-KILLNAME=acce-[0-9.-]+\[.*\]
-pkill -0 $KILLNAME 2>/dev/null
-[ $? -eq 0 ] || {
-    echo "$PRODUCT_NAME is NOT running!"
-    exit 1
-}
-
-HL_START="\033[37;40;1m"
-HL_END="\033[0m" 
-
-[ -z "$1" ] && {
-	echo "Usage: $0 {config | all | help}"
-	echo ""
-	echo -e "$0 help\t\tshow available config items"
-	echo -e "$0 all\t\tshow all"
-	echo "e.g. $0 wanIf"
-	exit 1
-}
-
-case "$1" in
-	help)
-		printf "${HL_START}Available config items:${HL_END}\n"
-		items=$(ls /proc/net/appex/ 2>/dev/null || $apxexe | sed 's/\[.*\]//g')
-		for i in $items; do
-			[[ "$i" = "." || "$i" = ".." || "$i" = "cmd" || "$i" = "version" || "$i" = "ioctl" || "$i" = "stats" \
-				|| "$i" = "byteCacheIoFails" || "$i" = "logLevel" || "$i" = "engine" || "$i" = "hz" ]] && {
-				continue
-			}
-			echo -en "$i\n"
-		done
-		items=$(cat /proc/net/appex/cmd 2>/dev/null | awk -F: '{print $1}')
-		[ -z "$items" ] && items=$($apxexe /0/cmd | awk -F: '{print $1}')
-		for i in $items; do
-			[ "$i" = "wanState" ] && continue
-			echo -en "${i/(1~16)/}\n"
-		done
-	;;
-    all)
-    	if [ $usermode -eq 0 ]; then
-	    	for engine in $(ls -d /proc/net/appex*); do
-	    		printf "${HL_START}%s:${HL_END}\n" $(basename $engine)
-	    		for i in $(ls $engine/); do
-					[[ "$i" = "." || "$i" = ".." || "$i" = "cmd" || "$i" = "version" || "$i" = "ioctl" || "$i" = "stats" \
-						|| "$i" = "byteCacheIoFails" || "$i" = "logLevel" || "$i" = "engine" || "$i" = "hz" ]] && {
-						continue
-					}
-					value=$(cat $engine/$i)
-					value=$(echo $value)
-					echo -en "$i: $value\n"
-				done
-				cat $engine/cmd | grep -v wanState
-				echo
-	    	done
-    	else
-    		items=$($apxexe | sed 's/\[.*\]//g')
-			for i in $items; do
-				[[ "$i" = "." || "$i" = ".." || "$i" = "cmd" || "$i" = "version" || "$i" = "ioctl" || "$i" = "stats" \
-					|| "$i" = "byteCacheIoFails" || "$i" = "logLevel" || "$i" = "engine" || "$i" = "hz" || "$i" = "guistats" ]] && {
-					continue
-				}
-				echo -en "$i: $($apxexe /0/$i)\n"
-			done
-			$apxexe /0/cmd | grep -v wanState
-    	fi
-    ;;
-    *)
-    	if [ $usermode -eq 0 ]; then
-	    	[ -f /proc/net/appex/$1 ] || grep "$1:" /proc/net/appex/cmd >/dev/null || [ $1 = "pcapFilterSplit" ] || {
-	    		echo "Invalid config! "
-	    		exit 1
-	    	}
-	    	for engine in $(ls -d /proc/net/appex*); do
-	    		printf "${HL_START}%s:${HL_END}\n" $(basename $engine)
-	    		if [ -f $engine/$1 ]; then
-					value=$(cat $engine/$1)
-					value=$(echo $value)
-					echo -en "$1: $value\n"
-				else
-					cat $engine/cmd | grep $1
-				fi
-				echo
-	    	done
-	    else
-	    	items=$($apxexe | sed 's/\[.*\]//g')
-			for i in $items; do
-				[[ "$i" != "$1" ]] && {
-					continue
-				}
-				echo -en "$i: $($apxexe /0/$i)\n"
-				exit 0
-			done
-			items=$($apxexe /0/cmd | awk -F: '{print $1}')
-			for i in $items; do
-				[[ "$i" != "$1" ]] && {
-					continue
-				}
-				$apxexe /0/cmd | grep $1
-				exit 0
-			done
-			[ "$1" = "pcapFilterSplit" ] && {
-				$apxexe /0/cmd | grep pcapFilterSplit
-				exit 0
-			}
-			[ "$i" != "$1" ] && echo "Invalid config! "
-	    fi
-    ;;
-  esaclotServer/apxfiles/bin/setConfig.sh0000644000000000000000000001514513435474612016420 0ustar  rootroot#!/bin/bash
-# Copyright (C) 2015 AppexNetworks
-# Author:	Len
-# Date:		Aug, 2015
-
-ROOT_PATH=/appex
-PRODUCT_NAME=LotServer
-
-[ -f $ROOT_PATH/etc/config ] || { echo "Missing file: $ROOT_PATH/etc/config"; exit 1; }
-. $ROOT_PATH/etc/config 2>/dev/null
-#KILLNAME=$(echo $(basename $apxexe) | sed "s/-\[.*\]//")
-#[ -z "$KILLNAME" ] && KILLNAME="acce-";
-KILLNAME=acce-[0-9.-]+\[.*\]
-pkill -0 $KILLNAME 2>/dev/null
-[ $? -eq 0 ] || {
-    echo "$PRODUCT_NAME is NOT running!"
-    exit 1
-}
-
-help() {
-	echo "Usage: $0 <config> <value1> [value2 ... [valueN]]"
-	echo ""
-	echo "e.g. $0 wanIf eth0"
-}
-
-checkIPv4() { 
-    local _ip    
-    local _ret    
-  
-    for _ip in $@    
-    do  
-        _ret=$(echo "$_ip" | awk -F '.' '{ if(NF!=4 || $1<0 || $2<0|| $3<0 ||$4<0|| $1>255 || $2>255 || $3>255 || $4>255) print 1; else print 0  }')
-        return $_ret
-    done
-}
-
-getIPv6Hex() {
-    local _ipv6=$1
-    local _v6
-    local _suffix
-    local _pre
-    local _mid
-    local _last
-    local _oldLFS
-    local _p1
-    local _p2
-    local _i
-    local _k=0
-
-    _v6=${_ipv6%/*}
-    _suffix=${_ipv6#*/}
-
-    # may be IPv4 mapped address
-    [ "${_v6:0:7}" == "::ffff:" -o "${_v6:0:7}" == "::FFFF:" ] && {
-        _p1=${_v6:7}
-
-        checkIPv4 $_p1
-        [ $? -eq 0 ] && {
-            _p1=$(echo "$_p1" | awk -F'.' '{printf "%02X%02X%02X%02X", $1, $2, $3, $4}')
-            echo "00000000000000000000FFFF$_p1/$_prefix"
-            return
-        }
-    }
-    if [[ $_v6 =~ "::" ]]; then
-        _p1=${_v6%::*}
-        _p2=${_v6#*::}
-
-        _oldIFS=$IFS
-        IFS=":" 
-
-        for _p in $_p1; do
-            _pre=$_pre$(printf "%04x" 0x$_p | tr [a-z] [A-Z])
-            _k=$(expr $_k + 1)
-        done
-
-        for _p in $_p2; do
-            _last=$_last$(printf "%04x" 0x$_p | tr [a-z] [A-Z])
-            _k=$(expr $_k + 1)
-        done
-        IFS=$_oldIFS
-
-        _k=$(expr 8 - $_k)
-        for ((_i=0;_i<_k;_i++)); do
-            _mid=${_mid}0000
-        done
-
-        echo $_pre$_mid$_last/$_suffix
-    else
-        _p1=${_v6%::*}
-
-        _oldIFS=$IFS
-        IFS=":" 
-        for _p in $_p1; do
-            _pre=$_pre$(printf "%04x" 0x$_p | tr [a-z] [A-Z])
-        done
-        IFS=$_oldIFS
-
-        echo $_pre/$_suffix
-    fi
-}
-
-formatIPv4() {
-	local word
-	local line=''
-	local prefix
-	local suffix
-	[[ -n "$@" ]] || return
-	for word in $@; do
-		[[ "$word" = "1" || "$word" = "0" ]] && continue
-		prefix=${word%/*}
-		suffix=${word#*/}
-		word=$(printf "%08X" 0x$prefix)
-		line="$line $word/$suffix"
-	done
-	line=$(echo $line | xargs -n 1 | sort)
-	echo $line
-}
-
-formatIPv6() {
-	local word
-	local line=''
-	local prefix
-	local suffix
-	[[ -n "$@" ]] || return
-	for word in $@; do
-		[[ "$word" = "1" || "$word" = "0" ]] && continue
-		logger $word
-		[ "$word" != "${word//:}" ] && word=$(getIPv6Hex $word)
-		logger $word
-		line="$line $word"
-	done
-	line=$(echo $line | xargs -n 1 | sort)
-	echo $line
-}
-
-item=$1
-shift
-value=$@
-
-[[ -z "$item" || -z "$value" || "$item" = "-help" || "$item" = "--help" ]] && {
-	help
-	exit 1
-}
-if [ $usermode -eq 0 ]; then
-	[ -f /proc/net/appex/$item ] || grep "$item:" /proc/net/appex/cmd >/dev/null || [ $item = "pcapFilterSplit" ] || {
-		echo "Invalid config! "
-		exit 1
-	}
-	
-	for engine in $(ls -d /proc/net/appex*); do
-		if [ -f $engine/$item ]; then
-			echo "$value" > $engine/$item 2>/dev/null
-			if [ $item = 'wanIf' ]; then
-				saved=$(cat $engine/$item 2>/dev/null)
-				saved=$(echo $saved)
-		    	for if in $value; do
-		    		[ "${saved/$if}" == "$saved" ] && {
-		    			echo "Failed to write configuration!"
-				    	exit 1
-		    		}
-		    	done
-			else
-				saved=$(cat $engine/$item 2>/dev/null)
-				saved=$(echo $saved)
-				[ "$value" != "$saved" ] && {
-					echo "Failed to write configuration!"
-					exit 1
-				}
-			fi
-		else
-			if [ "$item" = 'lanSegment' ]; then
-				PATTERN='^[0-9A-Fa-f]{7,8}/[0-9]{1,2}(\s{1,}[0-9A-Fa-f]{7,8}/[0-9]{1,2}){0,}(\s{1,}[0-1]){0,1}$'
-				[[ "$value" =~ $PATTERN ]] || {
-					echo "Failed to write configuration: lanSegment" >&2
-					exit 1
-				}
-				echo "$item: $value" > $engine/cmd 2>/dev/null
-				saved=$(awk -F': ' "/$item(\(.*\))?:/ {print \$2}" $engine/cmd 2>/dev/null)
-				saved=$(formatIPv4 $saved)
-				lanSegmentV4Fmt=$(formatIPv4 $value)
-				[[ "$saved" != "$lanSegmentV4Fmt" ]] && {
-					echo "Failed to write configuration: lanSegment" >&2
-					stop >/dev/null 2>&1
-					exit 1
-				}
-			elif [ "$item" = 'lanSegmentV6' ]; then
-				nf=`echo "$value" | awk '{print NF}'`
-				for _tmp in $value; do
-					((nf--))
-					ipcalc -cs6 "$_tmp"
-					if [[ $? -ne 0 ]]; then
-						if [[ $_tmp = "0" || $_tmp = "1" ]]; then
-							if [[ $nf -ne 0 ]]; then
-								echo "Failed to write configuration: lanSegmentV6" >&2
-								exit 1
-							fi
-						else
-							echo "Failed to write configuration: lanSegmentV6" >&2
-							exit 1
-						fi
-					fi
-				done
-				echo "$item: $value" > $engine/cmd 2>/dev/null
-				saved=$(awk -F': ' "/$item(\(.*\))?:/ {print \$2}" $engine/cmd 2>/dev/null)
-				saved=$(formatIPv6 $saved)
-				lanSegmentV6Fmt=$(formatIPv6 $value)
-				[[ "$saved" != "$lanSegmentV6Fmt" ]] && {
-					echo "Failed to write configuration: lanSegmentV6" >&2
-					stop >/dev/null 2>&1
-					exit 1
-				}
-			else
-				echo "$item: $value" > $engine/cmd 2>/dev/null
-				saved=$(awk -F': ' "/$item(\(.*\))?:/ {print \$2}" $engine/cmd 2>/dev/null)
-				[ "$value" != "$saved" ] && {
-					echo "Failed to write configuration!"
-					exit 1
-				}
-				# add mutual exclusion for ipv4Only & ipv6Only here
-				if [ "$item" = "ipv4Only" -a "$value" = "1" ]; then
-					echo "ipv6Only: 0" > $engine/cmd 2>/dev/null
-				elif [ "$item" = "ipv6Only" -a "$value" = "1" ]; then
-					echo "ipv4Only: 0" > $engine/cmd 2>/dev/null
-				fi
-			fi
-		fi
-	done
-else
-	for i in $($apxexe | sed 's/\[.*\]//g'); do
-		[[ "$i" != "$item" ]] && continue
-		$apxexe /0/$item="$value"
-		saved=$($apxexe /0/$item)
-		saved=$(echo $saved)
-		if [ $item = 'wanIf' ]; then
-	    	for if in $value; do
-	    		[ "${saved/$if}" == "$saved" ] && {
-	    			echo "Failed to write configuration!"
-			    	exit 1
-	    		}
-	    	done
-		else
-			[ "$value" != "$saved" ] && {
-				echo "Failed to write configuration!"
-				exit 1
-			}
-		fi
-		exit 0
-	done
-	
-	for i in $($apxexe /0/cmd | awk -F: '{print $1}') pcapFilterSplit; do
-		[[ "$i" != "$item" ]] && continue
-		$apxexe /0/cmd="$item $value"
-		
-		[ $item = 'lanSegmentV6' ] && continue
-		
-		saved=$($apxexe /0/cmd | awk -F': ' "/$item(\(.*\))?:/ {print \$2}")
-		if [ $item = 'lanSegment' ]; then
-			[[ ${saved#$value} == $saved && ${value#$saved} == $value ]] && {
-				echo "Failed to write configuration: lansegment"
-				exit 1
-			}
-		else
-			[ "$value" != "$saved" ] && {
-				echo "Failed to write configuration!"
-				exit 1
-			}
-		fi
-		exit 0
-	done
-	echo "Invalid config! "
-	exit 1
-	
-fi
-lotServer/install.sh0000644000000000000000000002161013455045330013545 0ustar  rootroot#!/bin/bash
-# Copyright (C) 2015 AppexNetworks
-# Author:	Len
-# Date:		Aug, 2015
-
-export PATH="$PATH:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin"
-
-ROOT_PATH=/appex
-SHELL_NAME=lotServer.sh
-PRODUCT_NAME=LotServer
-PRODUCT_ID=lotServer
-interactiveMode=1
-
-[ -w / ] || {
-	echo "You are not running $PRODUCT_NAME Installer as root. Please rerun as root"
-	exit 1
-}
-
-if [ $# -ge 1 -a "$1" == "uninstall" ]; then
-	acceExists=$(ls $ROOT_PATH/bin/acce* 2>/dev/null)
-    [ -z "$acceExists" ] && {
-        echo "$PRODUCT_NAME is not installed!"
-        exit
-    }
-    $ROOT_PATH/bin/$SHELL_NAME uninstall
-    exit
-fi
-
-function disp_usage() {
-	echo "Usage:  $INVOKER"
-	echo "   or:  $INVOKER  [-in inbound_bandwidth] [-out outbound_bandwidth] [-i interface] [-r] [-t shortRttMS] [-gso <0|1>] [-rsc <0|1>] [-b]"
-	echo "   or:  $INVOKER uninstall"
-	echo
-	echo -e "  -b, --boot\t\tauto load $PRODUCT_NAME on linux start-up"
-	echo -e "  -gso\t\t0 or 1, enable or disable gso"
-	echo -e "  -h, --help\t\tdisplay this help and exit"
-	echo -e "  -i\t\t\tspecify your accelerated interface(s), default eth0"
-	echo -e "  -in\t\t\tinbound bandwidth, default 1000000 kbps"
-	echo -e "  -out\t\t\toutbound bandwidth, default 1000000 kbps"
-	echo -e "  -r\t\t\tstart $PRODUCT_NAME after installation"
-	echo -e "  -rsc\t\t0 or 1, enable or disable rsc"
-	echo -e "  -t\t\t\tspecify shortRttMS, default 0"
-	echo -e "  uninstall\t\tuninstall $PRODUCT_NAME"
-	exit 0
-}
-
-function disp_usage_lite() {
-	echo "Usage: $INVOKER [-in inbound_bandwidth] [-out outbound_bandwidth] [-i interface] [-r] [-t shortRttMS] [-gso <0|1>] [-rsc <0|1>] [-b]"
-	exit 0
-}
-
-initValue() {
-	while [ -n "$1" ]; do
-	case "$1" in
-		-b|-boot)
-			boot='y'
-			shift 1
-			;;
-		-i)
-			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
-				disp_usage_lite
-			else
-				accif=$2
-			fi
-			shift 2
-			interactiveMode=0
-			;;
-		-r)
-			startNow='y'
-			shift 1
-			;;
-		-s)
-			showDetail=1
-			shift 1
-			;;
-		-in)
-			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
-				disp_usage_lite
-			else
-				waninkbps=$2
-			fi
-			shift 2
-			interactiveMode=0
-			;;
-		-out)
-			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
-				disp_usage_lite
-			else
-				wankbps=$2
-			fi
-			shift 2
-			interactiveMode=0
-			;;
-		-h|--help)
-			disp_usage
-			exit 0
-			;;
-		-x)
-			shift 1
-			;;
-		-t)
-			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
-				disp_usage_lite
-			else
-				shortRttMS=$2
-			fi
-			shift 2
-			;;
-		-gso)
-			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
-				disp_usage_lite
-			else
-				gso=$2
-			fi
-			shift 2
-			;;
-		-rsc)
-			if [ -z "$2" -o "${2#-*}" != "$2" ]; then
-				disp_usage_lite
-			else
-				rsc=$2
-			fi
-			shift 2
-			;;
-		
-		*)
-			echo "$0: unrecognized option '$1'"
-			echo
-			disp_usage
-			exit 1
-			;;
-	esac
-	done
-}
-
-[ $# -gt 0 ] && {
-	initValue "$@"
-}
-
-
-# Locate which
-WHICH=`which ls 2>/dev/null`
-[ $? -gt 0 ] && {
-	echo '"which" not found, please install "which" using "yum install which" or "apt-get install which" according to your linux distribution'
-	exit 1
-}
-
-IPCS=`which ipcs 2>/dev/null`
-[  $? -eq 0 ] && {
-    maxSegSize=`ipcs -l | awk -F= '/max seg size/ {print $2}'`
-    maxTotalSharedMem=`ipcs -l | awk -F= '/max total shared memory/ {print $2}'`
-    [ $maxSegSize -eq 0 -o $maxTotalSharedMem -eq 0 ] && {
-        echo "$PRODUCT_NAME needs to use shared memory, please configure the shared memory according to the following link: "
-        exit 1
-    }
-}
-
-ip2long() {
-	local IFS='.'
-	read ip1 ip2 ip3 ip4 <<<"$1"
-	echo $((ip1*(1<<24)+ip2*(1<<16)+ip3*(1<<8)+ip4))
-	#echo "$ip1 $ip2 $ip3 $ip4"
-}
-
-postInstall() {
-	local verName=$(cat $ROOT_PATH/etc/config | awk -F- '/^apxexe=/ {print $2}')
-	local intVerName=$(ip2long $verName)
-	local boundary
-	
-	boundary=$(ip2long '3.11.20.10')
-	[ $intVerName -ge $boundary ] && {
-		# if acce version greater than 3.11.20.10, set initial taskSchedDelay value to "100 100"
-		if [ -n "$(grep taskSchedDelay $ROOT_PATH/etc/config)" ]; then
-			sed -i "s/^taskSchedDelay=.*/taskSchedDelay=\"100 100\"/" $ROOT_PATH/etc/config
-		else
-			sed -i "/^txCongestObey=.*/taskSchedDelay=\"100 100\"" $ROOT_PATH/etc/config
-		fi
-	}
-}
-
-addStartUpLink() {
-	grep -E "CentOS|Fedora|Red.Hat" /etc/issue >/dev/null
-	[ $? -eq 0 ] && {
-		ln -sf $ROOT_PATH/bin/$SHELL_NAME /etc/rc.d/init.d/$PRODUCT_ID
-		[ -z "$boot" -o "$boot" = "n" ] && return
-		CHKCONFIG=`which chkconfig`
-		if [ -n "$CHKCONFIG" ]; then
-			chkconfig --add $PRODUCT_ID >/dev/null 2>&1
-		else
-			echo "Error, Please install 'chkconfig', and run 'chkconfig --add $PRODUCT_ID' to auto start." 
-		fi
-	}
-	grep "SUSE" /etc/issue >/dev/null
-	[ $? -eq 0 ] && {
-		ln -sf $ROOT_PATH/bin/$SHELL_NAME /etc/rc.d/$PRODUCT_ID
-		[ -z "$boot" -o "$boot" = "n" ] && return
-		CHKCONFIG=`which chkconfig`
-		if [ -n "$CHKCONFIG" ]; then
-			chkconfig --add $PRODUCT_ID >/dev/null 2>&1
-		else
-			echo "Error, Please install 'chkconfig', and run 'chkconfig --add $PRODUCT_ID' to auto start." 
-		fi
-	}
-	grep -E "Ubuntu|Debian" /etc/issue >/dev/null
-	[ $? -eq 0 ] && {
-		ln -sf $ROOT_PATH/bin/$SHELL_NAME /etc/init.d/$PRODUCT_ID
-		[ -z "$boot" -o "$boot" = "n" ] && return 
-		CHKCONFIG=`which update-rc.d`
-		if [ -n "$CHKCONFIG" ]; then
-		        update-rc.d -f $PRODUCT_ID remove >/dev/null 2>&1
-			update-rc.d $PRODUCT_ID defaults >/dev/null 2>&1
-		else
-			echo "Error, Please install 'update-rc.d', and run 'update-rc.d $PRODUCT_ID defaults' to auto start." 
-		fi
-	}
-}
-
-[ -d $ROOT_PATH/bin ] || mkdir -p $ROOT_PATH/bin
-[ -d $ROOT_PATH/etc ] || mkdir -p $ROOT_PATH/etc
-[ -d $ROOT_PATH/log ] || mkdir -p $ROOT_PATH/log
-cd $(dirname $0)
-dt=`date +%Y-%m-%d_%H-%M-%S`
-[ -f $ROOT_PATH/etc/config ] && mv -f $ROOT_PATH/etc/config $ROOT_PATH/etc/.config_$dt.bak
-
-cp -f apxfiles/bin/* $ROOT_PATH/bin/
-cp -f apxfiles/etc/* $ROOT_PATH/etc/
-chmod +x $ROOT_PATH/bin/*
-
-[ -f $ROOT_PATH/etc/.config_$dt.bak ] && {
-	while read _line; do
-		item=$(echo $_line | awk -F= '/^[^#]/ {print $1}')
-		val=$(echo $_line | awk -F= '/^[^#]/ {print $2}' | sed 's#\/#\\\/#g')
-		[ -n "$item" -a "$item" != "accpath" -a "$item" != "apxexe" -a "$item" != "apxlic" -a "$item" != "installerID" -a "$item" != "email" -a "$item" != "serial" ] && {
-			if [ -n "$(grep $item $ROOT_PATH/etc/config)" ]; then
-				sed -i "s/^$item=.*/$item=$val/" $ROOT_PATH/etc/config
-			else
-				sed -i "/^engineNum=.*/a$item=$val" $ROOT_PATH/etc/config
-			fi
-		}
-	done<$ROOT_PATH/etc/.config_$dt.bak
-}
-
-postInstall
-
-[ -f apxfiles/expiredDate ] && {
-    echo -n "Expired date: "
-    cat apxfiles/expiredDate
-    echo
-}
-
-echo "Installation done!"
-echo
- 
-# Set acc inf
-echo ----
-echo You are about to be asked to enter information that will be used by $PRODUCT_NAME,
-echo there are several fields and you can leave them blank,
-echo 'for all fields there will be a default value.'
-echo ----
-
-[ $interactiveMode -eq 1 -a -z "$accif" ] && {
-	# Set acc inf
-	echo -n "Enter your accelerated interface(s) [eth0]: "
-	read accif
-}
-[ $interactiveMode -eq 1 -a -z "$wankbps" ] && {
-	echo -n "Enter your outbound bandwidth [1000000 kbps]: "
-	read wankbps
-}
-[ $interactiveMode -eq 1 -a -z "$waninkbps" ] && {
-	echo -n "Enter your inbound bandwidth [1000000 kbps]: "
-	read waninkbps
-}
-[ $interactiveMode -eq 1 -a -z "$shortRttMS" ] && {
-	echo -e "\033[30;40;1m"
-	echo 'Notice:After set shorttRtt-bypass value larger than 0,' 
-	echo 'it will bypass(not accelerate) all first flow from same 24-bit'
-	echo 'network segment and the flows with RTT lower than the shortRtt-bypass value'
-	echo -e "\033[0m"
-	echo -n "Configure shortRtt-bypass [0 ms]: "
-	read shortRttMS
-}
-
-[ -z "$shortRttMS" ] || [ -n "${shortRttMS//[0-9]}" ] && shortRttMS=0
-
-[ -n "$accif" ] && sed -i "s/^accif=.*/accif=\"$accif\"/" $ROOT_PATH/etc/config
-[ -n "$wankbps" ] && {
-	wankbps=$(echo $wankbps | tr -d "[:alpha:][:space:]")
-	sed -i "s/^wankbps=.*/wankbps=\"$wankbps\"/" $ROOT_PATH/etc/config
-}
-[ -n "$waninkbps" ] && {
-	waninkbps=$(echo $waninkbps | tr -d "[:alpha:][:space:]")
-	sed -i "s/^waninkbps=.*/waninkbps=\"$waninkbps\"/" $ROOT_PATH/etc/config
-}
-[ -n "$shortRttMS" ] && {
-	shortRttMS=$(echo $shortRttMS | tr -d "[:alpha:][:space:]")
-	sed -i "s/^shortRttMS=.*/shortRttMS=\"$shortRttMS\"/" $ROOT_PATH/etc/config
-}
-
-[ -n "$gso" ] && {
-	gso=$(echo $gso | tr -d "[:alpha:][:space:]")
-	[ "$gso" = "1" ] && gso=1 || gso=0
-	sed -i "s/^gso=.*/gso=\"$gso\"/" $ROOT_PATH/etc/config
-}
-
-[ -n "$rsc" ] && {
-	rsc=$(echo $rsc | tr -d "[:alpha:][:space:]")
-	[ "$rsc" = "1" ] && rsc=1 || rsc=0
-	sed -i "s/^rsc=.*/rsc=\"$rsc\"/" $ROOT_PATH/etc/config
-}
-
-[ $interactiveMode -eq 1 -a -z "$boot" ] && {
-	while [ "$boot" != 'y' -a "$boot" != 'n' -a "$boot" != 'Y' -a "$boot" != 'N'  ]; do
-		echo -n "Auto load $PRODUCT_NAME on linux start-up? [n]:"
-		read boot
-		[ -z "$boot" ] && boot=n
-	done
-	[ "$boot" = "N" ] && boot=n 
-}
-
-addStartUpLink
-
-[ $interactiveMode -eq 1 -a -z "$startNow" ] && {
-	while [ "$startNow" != 'y' -a "$startNow" != 'n' -a "$startNow" != 'Y' -a "$startNow" != 'N'  ]; do
-		echo -n "Run $PRODUCT_NAME now? [y]:"
-		read startNow
-		[ -z "$startNow" ] && startNow=y
-	done
-}
-
-[ "$startNow" = "y" -o "$startNow" = "Y" ] && {
-	$ROOT_PATH/bin/$SHELL_NAME stop >/dev/null 2>&1
-	$ROOT_PATH/bin/$SHELL_NAME start 
-}
+# IPv4 & IPv6
+#
+# only enable IPv4 or IPv6
+ipv4Only=0
+ipv6Only=0
+
+#ipHooks="0"
+#ipRxHookPri=""
+#ipTxHookPri=""
+#ipv6Hooks="0"
+#ipv6RxHookPri=""
+#ipv6TxHookPri=""
+
+#------------------------------------------------------#
+#         do not change the following configures       #
+#------------------------------------------------------#
+usermode=0
+licenseGen=0
+checkLicense=0
+accpath="/proc/net/appex"
+apxexe="/appex/bin/acce-3.11.36.6-[Debian_9.3_4.9.0-4-amd64]"
+rttko="/appex/bin/{rttko}"
+apxlic="/appex/etc/apx-20341231.lic"
+
+serial="601ECA7320626C2B"
+email="zjl12321@163.com"
+installerID="=gTO"
